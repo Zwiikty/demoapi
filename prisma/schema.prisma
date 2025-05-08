@@ -1,0 +1,80 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  firstName     String
+  lastName      String
+  email         String    @unique
+  phone         String
+  password      String
+  role          Role      @default(CUSTOMER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  resetToken    String?
+  resetTokenExp DateTime?
+  bookings      Booking[]
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+model Court {
+  id           Int       @id @default(autoincrement())
+  name         String
+  location     String
+  pricePerHour Float
+  bookings     Booking[]
+  timeSlots    CourtTimeSlot[]
+}
+
+model Booking {
+  id        Int           @id @default(autoincrement())
+  user      User          @relation(fields: [userId], references: [id])
+  userId    Int
+  court     Court         @relation(fields: [courtId], references: [id])
+  courtId   Int
+  date      DateTime
+  startTime DateTime
+  endTime   DateTime
+  status    BookingStatus @default(PENDING)
+  slipImage String?
+  createAt  DateTime      @default(now())
+  updateAt  DateTime      @updatedAt
+  rescheduledFromId Int?
+  rescheduledFrom Booking? @relation("RescheduleRelation", fields: [rescheduledFromId], references: [id])
+  rescheduledTo Booking[] @relation("RescheduleRelation")
+  BookingChangeLog BookingChangeLog[]
+  paymentSlipAmount Float?
+  paymentVerified Boolean @default(false)
+  paymentConfirmedAt  DateTime?
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVE
+  REJECTED
+}
+
+model CourtTimeSlot {
+  id  Int @id @default(autoincrement())
+  court Court @relation(fields: [courtId], references: [id])
+  courtId Int
+  startTime DateTime
+  endTime DateTime
+}
+
+model BookingChangeLog {
+  id  Int @id @default(autoincrement())
+  booking Booking @relation(fields: [bookingId], references: [id])
+  bookingId Int
+  changedAt DateTime @default(now())
+}
