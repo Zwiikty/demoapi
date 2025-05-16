@@ -44,7 +44,7 @@ exports.adminRoute = [
 
 exports.customerRoute = [
     authenticate,
-    authorize([ 'ADMIN', 'CUSTOMER' ]),
+    authorize([ 'CUSTOMER' ]),
     ( req, res ) => {
         res.status(200).json({ message: 'Welcome Customer', user: req.user });
     }
