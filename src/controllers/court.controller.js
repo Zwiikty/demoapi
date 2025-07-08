@@ -1,4 +1,9 @@
 const prisma = require('../../prisma/client');
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 exports.createCourt = async (req, res) => {
     const { name, location, pricePerHour } = req.body;
@@ -59,24 +64,64 @@ exports.getCourtById = async (req, res) => {
 };
 
 exports.createTimeSlot = async (req, res) => {
-    const { courtId } = req.params;
-    const { startTime, endTime } = req.body;
-    const parsedCourtId = parseInt(courtId);
-    if (isNaN(parsedCourtId)) {
-        return res.status(400).json({ message: 'Invalid courtId' });
+  const { courtId } = req.params;
+  const { date, startHour, endHour } = req.body;
+
+  const parsedCourtId = parseInt(courtId);
+  if (isNaN(parsedCourtId)) {
+    return res.status(400).json({ message: "Invalid courtId" });
+  }
+
+  if (!date) {
+    return res.status(400).json({ message: "date is required" });
+  }
+
+  if (startHour >= endHour) {
+    return res.status(400).json({ message: "startHour must be less than endHour" });
+  }
+
+  try {
+    const startOfDay = dayjs.tz(`${date} 00:00`, "Asia/Bangkok").toDate();
+    const endOfDay = dayjs.tz(`${date} 23:59:59`, "Asia/Bangkok").toDate();
+//check timeslot
+    const existing = await prisma.courtTimeSlot.findFirst({
+      where: {
+        courtId: parsedCourtId,
+        startTime: {
+          gte: startOfDay,
+          lte: endOfDay
+        }
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        message: `Time slots for court ${parsedCourtId} on ${date} already exist`
+      });
     }
-    try {
-        const timeSlot = await prisma.courtTimeSlot.create({
-            data: {
-                courtId: parsedCourtId,
-                startTime: new Date(`2025-01-01T${startTime}:00Z`),
-                endTime: new Date(`2025-01-01T${endTime}:00Z`),
-            },
-        });
-        res.status(201).json({ message: 'Time slot created', timeSlot });
-    } catch (error) {
-        res.status(400).json({ message: 'Time slot failed', error: error.message });
+
+    const slotsData = [];
+
+    for (let hour = startHour; hour < endHour; hour++) {
+      slotsData.push({
+        courtId: parsedCourtId,
+        startTime: dayjs.tz(`${date} ${hour}:00`, "Asia/Bangkok").toDate(),
+        endTime: dayjs.tz(`${date} ${hour + 1}:00`, "Asia/Bangkok").toDate(),
+        status: "AVAILABLE"
+      });
     }
+
+    await prisma.$transaction([
+      prisma.courtTimeSlot.createMany({ data: slotsData })
+    ]);
+
+    res.status(201).json({
+      message: `Created ${slotsData.length} time slots`,
+      slots: slotsData
+    });
+  } catch (error) {
+    res.status(400).json({ message: "Failed to create time slots", error: error.message });
+  }
 };
 
 exports.getTimeSlots = async (req, res) => {
@@ -88,5 +133,25 @@ exports.getTimeSlots = async (req, res) => {
         res.status(200).json(timeSlots);
     } catch (error) {
         res.status(500).json({ message: 'Fetch failed', error: error.message });
+    }
+};
+
+exports.updateTimeSlotStatus = async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["AVAILABLE", "BOOKED", "MAINTENANCE"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+    }
+
+    try {
+        const updated = await prisma.courtTimeSlot.update({
+            where: { id: parseInt(id) },
+            data: { status }
+        });
+
+        res.json({ message: "Time slot status updated", timeSlot: updated });
+    } catch (error) {
+        res.status(400).json({ message: "Failed to update status", error: error.message });
     }
 };

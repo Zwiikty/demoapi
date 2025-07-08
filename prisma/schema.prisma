@@ -70,6 +70,13 @@ model CourtTimeSlot {
   courtId Int
   startTime DateTime
   endTime DateTime
+  status     SlotStatus @default(AVAILABLE)
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  MAINTENANCE
 }
 
 model BookingChangeLog {
