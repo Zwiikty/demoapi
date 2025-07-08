@@ -311,7 +311,36 @@ o Error(400)
     "message": "Time slot failed"
 }
 ```
-## 2.7 Get all Court
+## 2.7 Timeslots Status
+**Endpoint**: `/api/courts/timeslot/:id/status (/api/courts/timeslot/1/status)`
+**Method**: PATCH
+**Request Body Example**:
+```json
+{
+  "status": "BOOKED" (AVAILABLE,BOOKED,MAINTENANCE)
+}
+```
+**Response
+o Success (201): 
+```
+{
+    "message": "Time slot status updated",
+    "timeSlot": {
+        "id": 1,
+        "courtId": 1,
+        "startTime": "2025-06-12T12:00:00.000Z",
+        "endTime": "2025-06-12T13:00:00.000Z",
+        "status": "MAINTENANCE"
+    }
+}
+```
+o Error(400)
+```
+{
+    "message": "Failed to update status"
+}
+```
+## 2.8 Get all Court
 **Endpoint**: `/api/courts/:courtId/timeslots (/api/courts/1/timeslots)`
 **Method**: GET
 **Response
