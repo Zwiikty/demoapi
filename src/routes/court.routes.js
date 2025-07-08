@@ -10,7 +10,7 @@ router.get('/', courtController.getAllCourts);
 router.get('/:courtId', courtController.getCourtById);
 router.post('/:courtId/timeslots', authenticate, authorize(['ADMIN']), courtController.createTimeSlot);
 router.get('/:courtId/timeslots', courtController.getTimeSlots);
-router.patch('/timeslot/:id/status', courtController.updateTimeSlotStatus);
+router.patch('/timeslots/:id/status', courtController.updateTimeSlotStatus);
 
 
 module.exports = router;

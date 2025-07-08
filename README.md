@@ -288,8 +288,9 @@ o Error(500)
 **Request Body Example**:
 ```json
 {
-  "startTime": "08:00",
-  "endTime": "09:00"
+    "date": "2025-06-8",
+    "startHour": 8,
+    "endHour": 22
 }
 ```
 **Response
@@ -312,7 +313,7 @@ o Error(400)
 }
 ```
 ## 2.7 Timeslots Status
-**Endpoint**: `/api/courts/timeslot/:id/status (/api/courts/timeslot/1/status)`
+**Endpoint**: `/api/courts/timeslots/:id/status (/api/courts/timeslots/1/status)`
 **Method**: PATCH
 **Request Body Example**:
 ```json
