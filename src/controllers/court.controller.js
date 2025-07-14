@@ -63,6 +63,61 @@ exports.getCourtById = async (req, res) => {
     }
 };
 
+exports.getCourtsWithStatuses = async (req, res) => {
+    const { date, startTime, endTime } = req.query;
+
+    if (!date || !startTime || !endTime) {
+        return res.status(400).json({ message: 'Missing date, startTime, or endTime' });
+    }
+
+    try {
+        const formattedStartTime = startTime.replace('.', ':');
+        const formattedEndTime = endTime.replace('.', ':');
+        const startDateTime = new Date(`${date}T${formattedStartTime}`);
+        const endDateTime = new Date(`${date}T${formattedEndTime}`);
+
+        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+            return res.status(400).json({ message: 'Invalid date or time format provided. Please use HH.MM or HH:MM.' });
+        }
+
+        const allCourts = await prisma.court.findMany();
+        const overlappingSlots = await prisma.courtTimeSlot.findMany({
+            where: {
+                startTime: { lt: endDateTime },
+                endTime: { gt: startDateTime },
+            },
+            select: {
+                courtId: true,
+                status: true,
+            },
+        });
+
+        const busyCourtsMap = new Map();
+        overlappingSlots.forEach(slot => {
+            if (!busyCourtsMap.has(slot.courtId)) {
+                busyCourtsMap.set(slot.courtId, []);
+            }
+            busyCourtsMap.get(slot.courtId).push(slot.status);
+        });
+
+        const result = allCourts.map(court => {
+            const statuses = busyCourtsMap.get(court.id) || [];
+            return {
+                id: court.id,
+                name: court.name,
+                available: statuses,
+            };
+        });
+
+        return res.status(200).json({ courts: result });
+    } catch (error) {
+        console.error(error);
+        return res.status(400).json({ message: 'Fetch failed', error: error.message });
+    }
+};
+
+
+
 exports.createTimeSlot = async (req, res) => {
   const { courtId } = req.params;
   const { date, startHour, endHour } = req.body;

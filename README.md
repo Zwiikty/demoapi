@@ -363,6 +363,47 @@ o Error(500)
     "message": "Fetch failed"
 }
 ```
+## 2.9 Get Court Avalible
+**Endpoint**: `/api/courts/available?date&startTime&endTime (date=2025-07-14&startTime=08.00&endTime=09.00)` 
+**Method**: GET
+**Response
+o Success (200): 
+```
+[
+  {
+    "courts": [
+        {
+            "id": 1,
+            "name": "สนาม 1",
+            "available": [
+                "BOOKED"
+            ]
+        },
+        {
+            "id": 2,
+            "name": "สนาม 2",
+            "available": [
+                "BOOKED"
+            ]
+        },
+        {
+            "id": 7,
+            "name": "สนาม 5",
+            "available": [
+                "AVAILABLE"
+            ]
+        }
+    ]
+}
+  ...
+]
+```
+o Error(500)
+```
+{
+    "message": "Fetch failed"
+}
+```
 #######################################
 ### 3 Booking Managament
 ## 3.1 Create Court

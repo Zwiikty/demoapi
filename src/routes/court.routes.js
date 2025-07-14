@@ -4,6 +4,7 @@ const courtController = require('../controllers/court.controller');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 router.post('/', authenticate, authorize(['ADMIN']), courtController.createCourt);
+router.get('/available', courtController.getCourtsWithStatuses);
 router.put('/:courtId', authenticate, authorize(['ADMIN']), courtController.updateCourt);
 router.delete('/:courtId', authenticate, authorize(['ADMIN']), courtController.deleteCourt);
 router.get('/', courtController.getAllCourts);
@@ -11,6 +12,7 @@ router.get('/:courtId', courtController.getCourtById);
 router.post('/:courtId/timeslots', authenticate, authorize(['ADMIN']), courtController.createTimeSlot);
 router.get('/:courtId/timeslots', courtController.getTimeSlots);
 router.patch('/timeslots/:id/status', courtController.updateTimeSlotStatus);
+
 
 
 module.exports = router;
