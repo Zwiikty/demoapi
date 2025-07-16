@@ -18,7 +18,7 @@
 ```
 **Response
 o Success (201): 
-```
+```json
 {
     "message": "Register successful",
     "user": {
@@ -31,7 +31,7 @@ o Success (201):
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": "Email is already registered"
 }
@@ -50,14 +50,14 @@ o Error(400)
 ```
 **Response
 o Success (200): 
-```
+```json
 {
     "message": "Login successful",
     "token": "JWT token here"
 }
 ```
 o Error(401)
-```
+```json
 {
     "message": "Invalid token"
 }
@@ -69,7 +69,7 @@ o Error(401)
 - `Authorization: Bearer <token>`
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Logout successful"
 }
@@ -81,7 +81,7 @@ o Success (200):
 - `Authorization: Bearer <admin_token>`
 **Response
 o Success (200): 
-```
+```json
 {
     "message": "Welcome Admin",
     "user": {
@@ -99,7 +99,7 @@ o Success (200):
 - `Authorization: Bearer <customer_token>`
 **Response
 o Success (200): 
-```
+```json
 {
     "message": "Welcome customer",
     "user": {
@@ -122,14 +122,14 @@ o Success (200):
 ```
 **Response
 o Success : 
-```
+```json
 {
     "message": "Token to reset",
     "token": "token here"
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": "user not found"
 }
@@ -147,13 +147,13 @@ o Error(400)
 ```
 **Response
 o Success : 
-```
+```json
 {
   "message": "Password has been reset successfully"
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": 'Invalid or expired token'
 }
@@ -176,7 +176,7 @@ o Error(400)
 ```
 **Response
 o Success (201): 
-```
+```json
 {
   "message": "Court created",
   "court": {
@@ -189,7 +189,7 @@ o Success (201):
 
 ```
 o Error(400)
-```
+```json
 {
     "message": "Create failed"
 }
@@ -209,7 +209,7 @@ o Error(400)
 ```
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Court updated",
   "court": {
@@ -220,7 +220,7 @@ o Success (200):
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": "Update failed"
 }
@@ -230,13 +230,13 @@ o Error(400)
 **Method**: DELETE
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Court deleted"
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": "Delete failed"
 }
@@ -246,7 +246,7 @@ o Error(400)
 **Method**: GET
 **Response
 o Success (200): 
-```
+```json
 [
   {
     "id": 1,
@@ -258,7 +258,7 @@ o Success (200):
 ]
 ```
 o Error(500)
-```
+```json
 {
     "message": "Fetch failed"
 }
@@ -268,7 +268,7 @@ o Error(500)
 **Method**: GET
 **Response
 o Success (200): 
-```
+```json
   {
     "id": 1,
     "name": "Court A",
@@ -277,7 +277,7 @@ o Success (200):
   }
 ```
 o Error(500)
-```
+```json
 {
     "message": "Fetch failed"
 }
@@ -295,7 +295,7 @@ o Error(500)
 ```
 **Response
 o Success (201): 
-```
+```json
 {
   "message": "Time slot created",
   "timeSlot": {
@@ -307,7 +307,7 @@ o Success (201):
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": "Time slot failed"
 }
@@ -323,7 +323,7 @@ o Error(400)
 ```
 **Response
 o Success (201): 
-```
+```json
 {
     "message": "Time slot status updated",
     "timeSlot": {
@@ -336,7 +336,7 @@ o Success (201):
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": "Failed to update status"
 }
@@ -346,7 +346,7 @@ o Error(400)
 **Method**: GET
 **Response
 o Success (200): 
-```
+```json
 [
   {
     "id": 1,
@@ -358,7 +358,7 @@ o Success (200):
 ]
 ```
 o Error(500)
-```
+```json
 {
     "message": "Fetch failed"
 }
@@ -368,7 +368,7 @@ o Error(500)
 **Method**: GET
 **Response
 o Success (200): 
-```
+```json
 [
   {
     "courts": [
@@ -399,7 +399,7 @@ o Success (200):
 ]
 ```
 o Error(500)
-```
+```json
 {
     "message": "Fetch failed"
 }
@@ -422,7 +422,7 @@ o Error(500)
 ```
 **Response
 o Success (201): 
-```
+```json
 {
   "message": "Booking crated",
   "booking": {
@@ -436,21 +436,21 @@ o Success (201):
 }
 ```
 o Error(400)
-```
+```json
 {
     "message": "Start time must be before end time" (check time booking),
     "message": 'This time slot is already booked' (overlap Booking)
 }
 ```
 ## 3.2 Upload Slip
-**Endpoint**: `/api/bookings/:bookingId/slip (/api/bookings/5/slip)`
+**Endpoint**: `/api/bookings/upload-slip/:bookingId (/api/bookings/upload-slip/2)`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <User_token>`
 - `Form-Data: slip <file: image/png>`
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Slip uploaded",
   "booking": {
@@ -462,7 +462,7 @@ o Success (200):
 
 ```
 o Error(400)
-```
+```json
 {
     "message": "No Slip image provided (No Slip image)",
     "message": "Upload failed" (Default)
@@ -475,7 +475,7 @@ o Error(400)
 - `Authorization: Bearer <User_token>`
 **Response
 o Success (200): 
-```
+```json
 [
   {
     "id": 5,
@@ -491,7 +491,7 @@ o Success (200):
 ]
 ```
 o Error(500)
-```
+```json
 {
     "message": "Fetch failed"
 }
@@ -509,7 +509,7 @@ o Error(500)
 ```
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Booking approve",
   "booking": {
@@ -520,7 +520,7 @@ o Success (200):
 
 ```
 o Error(500)
-```
+```json
 {
     "message": "Fetch failed"
 }
@@ -544,7 +544,7 @@ o Error(500)
 ```
 **Response
 o Success (201): 
-```
+```json
 {
   "message": "Booking rescheduled",
   "newBooking": {
@@ -555,12 +555,12 @@ o Success (201):
 
 ```
 o Error(400)
-```
+```json
 {
     "message": "Booking not found or unauthorize" (กรณีไม่เจอ booking)
     "message": 'You can only rescheduled once per booking' (จองได้ครั้งเดียวต่อบิล)
     "message": "Reschedule must be 3-6 hour before the original booking" (ระยะเวลาจองล่วงหน้า)
-    "message": "Time slot already booked" (กัน overlap
+    "message": "Time slot already booked" (กัน overlap)
 }
 ```
 ## 3.6 Get All Bookings (ADMIN)
@@ -570,7 +570,7 @@ o Error(400)
 - `Authorization: Bearer <Admin_token>`
 **Response
 o Success (200): 
-```
+```json
 [
   {
     "id": 5,
@@ -588,7 +588,7 @@ o Success (200):
 ]
 ```
 o Error(500)
-```
+```json
 {
     "message": "Fetch failed
 }
@@ -600,14 +600,14 @@ o Error(500)
 - `Authorization: Bearer <Admin_token>`
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Booking canceled"
 }
 
 ```
 o Error(500)
-```
+```json
 {
     "message": "Cancel failed
 }
@@ -628,14 +628,14 @@ o Error(500)
 ```
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "QR Code generated successfully",
-  "qrImage": "data:image/png;base64,iVBORw0KGgo..."
+  "qrImage": "data:image/png;base64,iVBORw0KGgo..." (copy all)
 }
 ```
 o Error(500)
-```
+```json
 {
     "message": "Qr generation failed
 }
@@ -644,7 +644,7 @@ o Error(500)
 **Endpoint**: `/api/payments/generate-qr`
 **Method**: POST
 **Request Headers**:  
-- `Authorization: Bearer <User_token>`
+- `Authorization: Bearer <Admin_token>`
 **Request Body Example**:
 ```json
 {
@@ -654,7 +654,7 @@ o Error(500)
 ```
 **Response
 o Success (200): 
-```
+```json
 {
   "amount": 150,
   "expectedAmount": 150,
@@ -664,7 +664,7 @@ o Success (200):
 }
 ```
 o Error(500)
-```
+```json
 {
     "message": "ORC failed
 }
@@ -682,7 +682,7 @@ o Error(500)
 ```
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Payment verified by admin",
   "booking": {
@@ -694,7 +694,7 @@ o Success (200):
 }
 ```
 o Error(500)
-```
+```json
 {
     "message": "Verification failed
 }
@@ -712,7 +712,7 @@ o Error(500)
 ```
 **Response
 o Success (200): 
-```
+```json
 {
   "message": "Payment rejected by admin",
   "booking": {
@@ -724,7 +724,7 @@ o Success (200):
 }
 ```
 o Error(500)
-```
+```json
 {
     "message": "Rejection failed
 }
