@@ -6,7 +6,13 @@ const cors = require('cors');
 
 app.use(express.json());
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:54037'],
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (origin.startsWith('http://localhost:')) {
+            return callback(null, true);
+        }
+        callback(new Error('Not allowed by CORS'));
+    },
     credentials: true
 }));
 
