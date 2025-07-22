@@ -91,3 +91,29 @@ exports.resetPassword = async (req, res) => {
     });
     res.json({ message: 'Password has been reset successfully' });
 };
+
+exports.WhoAmI = async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.status(200).json({
+            name: `${user.firstName} ${user.lastName}`,
+            email: user.email,
+            phone: user.phone
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to fetch user info', error: error.message });
+    }
+};

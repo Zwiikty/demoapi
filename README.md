@@ -158,6 +158,26 @@ o Error(400)
     "message": 'Invalid or expired token'
 }
 ```
+## 1.8 Who am i
+*Endpoint**: `/api/auth/whoami`
+**Method**: GET
+**Request Headers**:  
+- `Authorization: Bearer <token>`
+**Response
+o Success (200): 
+```json
+{
+    "name": "ice sun",
+    "email": "ice@example.com",
+    "phone": "1234567890"
+}
+```
+o Error(500)
+```json
+{
+    "message": "failed to fetch user info"
+}
+```
 #######################################
 ### 2 Court Managament
 ## 2.1 Create Court
