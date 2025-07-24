@@ -17,9 +17,7 @@ exports.register = async ( req, res ) => {
 exports.login = async ( req, res) => {
     try {
         const { email, password } = req.body;
-        //console.log('Login attempt:', email);
         const data = await authService.login( email, password );
-        //console.log('Login success:', data);
         res.status(200).json({ message: 'Login successful', token: data.token });
     } catch ( error ) {
         res.status(400).json({ message: error.message });
@@ -115,5 +113,41 @@ exports.WhoAmI = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ message: 'Failed to fetch user info', error: error.message });
+    }
+};
+
+exports.updateUserProfile = async (req, res) => {
+    try {
+        const { firstName, lastName, phone } = req.body;
+
+        if (!firstName || !lastName || !phone) {
+            return res.status(400).json({ message: 'Missing required fields' });
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: req.user.id },
+            data: {
+                firstName,
+                lastName,
+                phone
+            },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                email: true,
+                updatedAt: true
+            }
+        });
+
+        return res.status(200).json({
+            message: 'User profile updated successfully',
+            user: updatedUser
+        });
+
+    } catch (error) {
+        console.error("Update error:", error);
+        return res.status(500).json({ message: 'Update failed', error: error.message });
     }
 };

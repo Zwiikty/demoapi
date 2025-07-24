@@ -178,6 +178,40 @@ o Error(500)
     "message": "failed to fetch user info"
 }
 ```
+## 1.9 Update Profile
+*Endpoint**: `/api/auth/update-profile`
+**Method**: PUT
+**Request Body Example**:
+- `Authorization: Bearer <token>`
+```json
+{
+  "firstName": "PP",
+  "lastName": "AI",
+  "phone": "000000009"
+}
+```
+**Response
+o Success (200): 
+```json
+{
+    "message": "User profile updated successfully",
+    "user": {
+        "id": 0,
+        "firstName": "PP",
+        "lastName": "AI",
+        "phone": "000000009",
+        "email": "ice@example.com",
+        "updatedAt": "2025-07-24T12:43:55.619Z"
+    }
+}
+
+```
+o Error(500)
+```json
+{
+    "message": "Update failed"
+}
+```
 #######################################
 ### 2 Court Managament
 ## 2.1 Create Court
@@ -384,7 +418,7 @@ o Error(500)
 }
 ```
 ## 2.9 Get Court Avalible
-**Endpoint**: `/api/courts/available?date&startTime&endTime (date=2025-07-14&startTime=08.00&endTime=09.00)` 
+**Endpoint**: `/api/courts/available?date&startTime (date=2025-07-14&startTime=08.00)` 
 **Method**: GET
 **Response
 o Success (200): 
@@ -395,24 +429,232 @@ o Success (200):
         {
             "id": 1,
             "name": "สนาม 1",
-            "available": [
-                "BOOKED"
+            "slots": [
+                {
+                    "startTime": "08:00",
+                    "endTime": "09:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "09:00",
+                    "endTime": "10:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "10:00",
+                    "endTime": "11:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "11:00",
+                    "endTime": "12:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "12:00",
+                    "endTime": "13:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "13:00",
+                    "endTime": "14:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "14:00",
+                    "endTime": "15:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "15:00",
+                    "endTime": "16:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "16:00",
+                    "endTime": "17:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "17:00",
+                    "endTime": "18:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "18:00",
+                    "endTime": "19:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "19:00",
+                    "endTime": "20:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "20:00",
+                    "endTime": "21:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "21:00",
+                    "endTime": "22:00",
+                    "status": "AVAILABLE"
+                }
             ]
         },
         {
             "id": 2,
             "name": "สนาม 2",
-            "available": [
-                "BOOKED"
+            "slots": [
+                {
+                    "startTime": "08:00",
+                    "endTime": "09:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "09:00",
+                    "endTime": "10:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "10:00",
+                    "endTime": "11:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "11:00",
+                    "endTime": "12:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "12:00",
+                    "endTime": "13:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "13:00",
+                    "endTime": "14:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "14:00",
+                    "endTime": "15:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "15:00",
+                    "endTime": "16:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "16:00",
+                    "endTime": "17:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "17:00",
+                    "endTime": "18:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "18:00",
+                    "endTime": "19:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "19:00",
+                    "endTime": "20:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "20:00",
+                    "endTime": "21:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "21:00",
+                    "endTime": "22:00",
+                    "status": "AVAILABLE"
+                }
             ]
         },
         {
-            "id": 7,
-            "name": "สนาม 5",
-            "available": [
-                "AVAILABLE"
+            "id": 5,
+            "name": "สนาม 3",
+            "slots": [
+                {
+                    "startTime": "08:00",
+                    "endTime": "09:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "09:00",
+                    "endTime": "10:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "10:00",
+                    "endTime": "11:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "11:00",
+                    "endTime": "12:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "12:00",
+                    "endTime": "13:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "13:00",
+                    "endTime": "14:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "14:00",
+                    "endTime": "15:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "15:00",
+                    "endTime": "16:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "16:00",
+                    "endTime": "17:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "17:00",
+                    "endTime": "18:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "18:00",
+                    "endTime": "19:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "19:00",
+                    "endTime": "20:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "20:00",
+                    "endTime": "21:00",
+                    "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "21:00",
+                    "endTime": "22:00",
+                    "status": "AVAILABLE"
+                }
             ]
-        }
+        },
+        ...
     ]
 }
   ...
@@ -635,7 +877,7 @@ o Error(500)
 #######################################
 ### 4 Payment 
 ## 4.1 Generate PromptPay QR Code
-**Endpoint**: `/api/payments/generate-qr`
+**Endpoint**: `/api/payment/generate-qr`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <User_token>`
@@ -661,7 +903,7 @@ o Error(500)
 }
 ```
 ## 4.2 Read Amount From Slip (OCR)
-**Endpoint**: `/api/payments/generate-qr`
+**Endpoint**: `/api/payment/generate-qr`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <Admin_token>`
@@ -690,7 +932,7 @@ o Error(500)
 }
 ```
 ## 4.3 Approve Payment
-**Endpoint**: `/api/payments/admin/verify`
+**Endpoint**: `/api/payment/admin/verify`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <Admin_token>`
@@ -720,7 +962,7 @@ o Error(500)
 }
 ```
 ## 4.4 Reject Payment
-**Endpoint**: `/api/payments/admin/reject`
+**Endpoint**: `/api/payment/admin/reject`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <Admin_token>`

@@ -64,57 +64,63 @@ exports.getCourtById = async (req, res) => {
 };
 
 exports.getCourtsWithStatuses = async (req, res) => {
-    const { date, startTime, endTime } = req.query;
+    const { date } = req.query;
 
-    if (!date || !startTime || !endTime) {
-        return res.status(400).json({ message: 'Missing date, startTime, or endTime' });
+    if (!date) {
+        return res.status(400).json({ message: 'Missing date' });
     }
 
     try {
-        const formattedStartTime = startTime.replace('.', ':');
-        const formattedEndTime = endTime.replace('.', ':');
-        const startDateTime = new Date(`${date}T${formattedStartTime}`);
-        const endDateTime = new Date(`${date}T${formattedEndTime}`);
-
-        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-            return res.status(400).json({ message: 'Invalid date or time format provided. Please use HH.MM or HH:MM.' });
+        const selectedDate = new Date(date);
+        if (isNaN(selectedDate.getTime())) {
+            return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
         }
 
-        const allCourts = await prisma.court.findMany();
-        const overlappingSlots = await prisma.courtTimeSlot.findMany({
+        const courts = await prisma.court.findMany();
+        const slots = await prisma.courtTimeSlot.findMany({
             where: {
-                startTime: { lt: endDateTime },
-                endTime: { gt: startDateTime },
+                startTime: {
+                    gte: new Date(`${date}T00:00:00`),
+                    lt: new Date(`${date}T23:59:59`)
+                }
             },
+            orderBy: { startTime: 'asc' },
             select: {
                 courtId: true,
-                status: true,
-            },
-        });
-
-        const busyCourtsMap = new Map();
-        overlappingSlots.forEach(slot => {
-            if (!busyCourtsMap.has(slot.courtId)) {
-                busyCourtsMap.set(slot.courtId, []);
+                startTime: true,
+                endTime: true,
+                status: true
             }
-            busyCourtsMap.get(slot.courtId).push(slot.status);
         });
 
-        const result = allCourts.map(court => {
-            const statuses = busyCourtsMap.get(court.id) || [];
-            return {
-                id: court.id,
-                name: court.name,
-                available: statuses,
+        const slotsByCourt = {};
+        slots.forEach(slot => {
+            const formattedSlot = {
+                startTime: slot.startTime.toTimeString().slice(0, 5),
+                endTime: slot.endTime.toTimeString().slice(0, 5),
+                status: slot.status
             };
+
+            if (!slotsByCourt[slot.courtId]) {
+                slotsByCourt[slot.courtId] = [];
+            }
+
+            slotsByCourt[slot.courtId].push(formattedSlot);
         });
+
+        const result = courts.map(court => ({
+            id: court.id,
+            name: court.name,
+            slots: slotsByCourt[court.id] || []
+        }));
 
         return res.status(200).json({ courts: result });
     } catch (error) {
         console.error(error);
-        return res.status(400).json({ message: 'Fetch failed', error: error.message });
+        return res.status(500).json({ message: 'Fetch failed', error: error.message });
     }
 };
+
 
 
 
