@@ -64,33 +64,53 @@ exports.getCourtById = async (req, res) => {
 };
 
 exports.getCourtsWithStatuses = async (req, res) => {
-    const { date, startTime } = req.query;
+    const { date, startTime, endTime } = req.query;
 
-    if (!date || !startTime) {
-        return res.status(400).json({ message: 'Missing date or startTime' });
+    if (!date || !startTime || !endTime) {
+        return res.status(400).json({ message: 'Missing date, startTime, or endTime' });
     }
 
     try {
-        const selectedDate = new Date(`${date}T00:00:00`);
+        const selectedDate = new Date(date);
         if (isNaN(selectedDate.getTime())) {
             return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
         }
 
-        const [hour, minute] = startTime.split('.').map(Number);
-        if (isNaN(hour) || isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return res.status(400).json({ message: 'Invalid startTime format. Use HH.MM' });
+        const parseHour = (timeStr) => {
+            const [hour, minute] = timeStr.split('.').map(Number);
+            if (
+                isNaN(hour) || isNaN(minute) ||
+                hour < 0 || hour > 24 || minute !== 0
+            ) {
+                throw new Error('Invalid time format. Use HH.00 (e.g. 08.00)');
+            }
+            return hour;
+        };
+
+        const startHour = parseHour(startTime);
+        const endHour = parseHour(endTime);
+
+        if (endHour <= startHour) {
+            return res.status(400).json({ message: 'endTime must be later than startTime' });
         }
-        const queryStartDateTime = new Date(selectedDate);
-        queryStartDateTime.setHours(hour, minute || 0, 0, 0);
-        const queryEndDateTime = new Date(selectedDate);
-        queryEndDateTime.setDate(selectedDate.getDate() + 1);
+        const generateTimeSlots = () => {
+            const slots = [];
+            for (let hour = startHour; hour < endHour; hour++) {
+                const start = `${hour.toString().padStart(2, '0')}:00`;
+                const end = `${(hour + 1).toString().padStart(2, '0')}:00`;
+                slots.push({ startTime: start, endTime: end });
+            }
+            return slots;
+        };
+        const allTimeSlots = generateTimeSlots();
+
         const courts = await prisma.court.findMany();
 
         const slotsFromDB = await prisma.courtTimeSlot.findMany({
             where: {
                 startTime: {
-                    gte: queryStartDateTime,
-                    lt: queryEndDateTime
+                    gte: new Date(`${date}T00:00:00`),
+                    lt: new Date(`${date}T24:00:00`)
                 }
             },
             select: {
@@ -98,40 +118,42 @@ exports.getCourtsWithStatuses = async (req, res) => {
                 startTime: true,
                 endTime: true,
                 status: true
-            },
-            orderBy: {
-                startTime: 'asc'
             }
         });
 
-        const slotsByCourt = {};
+        const slotMap = {};
         slotsFromDB.forEach(slot => {
-            const courtId = slot.courtId;
-            if (!slotsByCourt[courtId]) {
-                slotsByCourt[courtId] = [];
-            }
-            const slotStartTimeFormatted = new Date(slot.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-            const slotEndTimeFormatted = new Date(slot.endTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-
-            slotsByCourt[courtId].push({
-                startTime: slotStartTimeFormatted,
-                endTime: slotEndTimeFormatted,
-                status: slot.status
-            });
+            const time = slot.startTime.toTimeString().slice(0, 5); // HH:MM
+            const key = `${slot.courtId}_${time}`;
+            slotMap[key] = slot.status;
         });
 
-        const result = courts.map(court => ({
-            id: court.id,
-            name: court.name,
-            slots: slotsByCourt[court.id] || []
-        }));
+        const result = courts.map(court => {
+            const slots = allTimeSlots.map(ts => {
+                const key = `${court.id}_${ts.startTime}`;
+                const status = slotMap[key] || 'UNAVAILABLE';
+                return {
+                    startTime: ts.startTime,
+                    endTime: ts.endTime,
+                    status
+                };
+            });
+
+            return {
+                id: court.id,
+                name: court.name,
+                slots
+            };
+        });
 
         return res.status(200).json({ courts: result });
+
     } catch (error) {
-        console.error("Error in getCourtsWithStatuses:", error);
+        console.error(error);
         return res.status(500).json({ message: 'Fetch failed', error: error.message });
     }
 };
+
 
 
 
