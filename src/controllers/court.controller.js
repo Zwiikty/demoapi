@@ -64,10 +64,10 @@ exports.getCourtById = async (req, res) => {
 };
 
 exports.getCourtsWithStatuses = async (req, res) => {
-    const { date } = req.query;
+    const { date, startTime } = req.query;
 
-    if (!date) {
-        return res.status(400).json({ message: 'Missing date' });
+    if (!date || !startTime) {
+        return res.status(400).json({ message: 'Missing date or startTime' });
     }
 
     try {
@@ -76,15 +76,29 @@ exports.getCourtsWithStatuses = async (req, res) => {
             return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
         }
 
+        const startHour = parseInt(startTime.split('.')[0], 10);
+        if (isNaN(startHour) || startHour < 0 || startHour > 23) {
+            return res.status(400).json({ message: 'Invalid startTime. Use format HH.mm (e.g. 08.00)' });
+        }
+
+        const generateTimeSlots = () => {
+            const slots = [];
+            for (let hour = startHour; hour < 24; hour++) {
+                const start = `${hour.toString().padStart(2, '0')}:00`;
+                const end = `${(hour + 1).toString().padStart(2, '0')}:00`;
+                slots.push({ startTime: start, endTime: end });
+            }
+            return slots;
+        };
+        const allTimeSlots = generateTimeSlots();
         const courts = await prisma.court.findMany();
-        const slots = await prisma.courtTimeSlot.findMany({
+        const slotsFromDB = await prisma.courtTimeSlot.findMany({
             where: {
                 startTime: {
                     gte: new Date(`${date}T00:00:00`),
                     lt: new Date(`${date}T23:59:59`)
                 }
             },
-            orderBy: { startTime: 'asc' },
             select: {
                 courtId: true,
                 startTime: true,
@@ -93,35 +107,38 @@ exports.getCourtsWithStatuses = async (req, res) => {
             }
         });
 
-        const slotsByCourt = {};
-        slots.forEach(slot => {
-            const formattedSlot = {
-                startTime: slot.startTime.toTimeString().slice(0, 5),
-                endTime: slot.endTime.toTimeString().slice(0, 5),
-                status: slot.status
-            };
-
-            if (!slotsByCourt[slot.courtId]) {
-                slotsByCourt[slot.courtId] = [];
-            }
-
-            slotsByCourt[slot.courtId].push(formattedSlot);
+        const slotMap = {};
+        slotsFromDB.forEach(slot => {
+            const time = slot.startTime.toTimeString().slice(0, 5); // 'HH:MM'
+            const key = `${slot.courtId}_${time}`;
+            slotMap[key] = slot.status;
         });
 
-        const result = courts.map(court => ({
-            id: court.id,
-            name: court.name,
-            slots: slotsByCourt[court.id] || []
-        }));
+        const result = courts.map(court => {
+            const slots = allTimeSlots.map(ts => {
+                const key = `${court.id}_${ts.startTime}`;
+                const status = slotMap[key] || 'UNAVAILABLE';
+                return {
+                    startTime: ts.startTime,
+                    endTime: ts.endTime,
+                    status
+                };
+            });
+
+            return {
+                id: court.id,
+                name: court.name,
+                slots
+            };
+        });
 
         return res.status(200).json({ courts: result });
+
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Fetch failed', error: error.message });
     }
 };
-
-
 
 
 exports.createTimeSlot = async (req, res) => {
