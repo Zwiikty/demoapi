@@ -71,13 +71,8 @@ exports.getCourtsWithStatuses = async (req, res) => {
     }
 
     try {
-        const selectedDate = new Date(date);
-        if (isNaN(selectedDate.getTime())) {
-            return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
-        }
-
         const parseHour = (timeStr) => {
-            const [hour, minute] = timeStr.split('.').map(Number);
+            const [hour, minute] = timeStr.split(':').map(Number);
             if (
                 isNaN(hour) || isNaN(minute) ||
                 hour < 0 || hour > 24 || minute !== 0
@@ -93,48 +88,51 @@ exports.getCourtsWithStatuses = async (req, res) => {
         if (endHour <= startHour) {
             return res.status(400).json({ message: 'endTime must be later than startTime' });
         }
-        const generateTimeSlots = () => {
-            const slots = [];
-            for (let hour = startHour; hour < endHour; hour++) {
-                const start = `${hour.toString().padStart(2, '0')}:00`;
-                const end = `${(hour + 1).toString().padStart(2, '0')}:00`;
-                slots.push({ startTime: start, endTime: end });
-            }
-            return slots;
-        };
-        const allTimeSlots = generateTimeSlots();
+
+        const allTimeSlots = [];
+        for (let hour = startHour; hour < endHour; hour++) {
+            const start = dayjs.tz(`${date} ${hour}:00`, 'Asia/Bangkok');
+            const end = start.add(1, 'hour');
+            allTimeSlots.push({
+                start,
+                end,
+                startKey: start.format('HH:mm'),
+                endKey: end.format('HH:mm')
+            });
+        }
 
         const courts = await prisma.court.findMany();
+
+        const startOfDay = dayjs.tz(`${date} 00:00`, 'Asia/Bangkok').toDate();
+        const endOfDay = dayjs.tz(`${date} 23:59:59`, 'Asia/Bangkok').toDate();
 
         const slotsFromDB = await prisma.courtTimeSlot.findMany({
             where: {
                 startTime: {
-                    gte: new Date(`${date}T00:00:00`),
-                    lt: new Date(`${date}T24:00:00`)
+                    gte: startOfDay,
+                    lte: endOfDay
                 }
             },
             select: {
                 courtId: true,
                 startTime: true,
-                endTime: true,
                 status: true
             }
         });
 
         const slotMap = {};
         slotsFromDB.forEach(slot => {
-            const time = slot.startTime.toTimeString().slice(0, 5); // HH:MM
-            const key = `${slot.courtId}_${time}`;
+            const key = `${slot.courtId}_${dayjs(slot.startTime).tz('Asia/Bangkok').format('HH:mm')}`;
             slotMap[key] = slot.status;
         });
 
         const result = courts.map(court => {
-            const slots = allTimeSlots.map(ts => {
-                const key = `${court.id}_${ts.startTime}`;
+            const slots = allTimeSlots.map(slot => {
+                const key = `${court.id}_${slot.startKey}`;
                 const status = slotMap[key] || 'UNAVAILABLE';
                 return {
-                    startTime: ts.startTime,
-                    endTime: ts.endTime,
+                    startTime: slot.startKey,
+                    endTime: slot.endKey,
                     status
                 };
             });
