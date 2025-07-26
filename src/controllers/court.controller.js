@@ -71,21 +71,26 @@ exports.getCourtsWithStatuses = async (req, res) => {
     }
 
     try {
-        const selectedDate = new Date(date);
+        const selectedDate = new Date(`${date}T00:00:00`);
         if (isNaN(selectedDate.getTime())) {
             return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
         }
 
         const [hour, minute] = startTime.split('.').map(Number);
-        const startTimeDate = new Date(date);
-        startTimeDate.setHours(hour, minute || 0, 0, 0);
+        if (isNaN(hour) || isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            return res.status(400).json({ message: 'Invalid startTime format. Use HH.MM' });
+        }
+        const queryStartDateTime = new Date(selectedDate);
+        queryStartDateTime.setHours(hour, minute || 0, 0, 0);
+        const queryEndDateTime = new Date(selectedDate);
+        queryEndDateTime.setDate(selectedDate.getDate() + 1);
         const courts = await prisma.court.findMany();
 
         const slotsFromDB = await prisma.courtTimeSlot.findMany({
             where: {
                 startTime: {
-                    gte: startTimeDate,
-                    lt: new Date(`${date}T23:59:59`)
+                    gte: queryStartDateTime,
+                    lt: queryEndDateTime
                 }
             },
             select: {
@@ -105,9 +110,12 @@ exports.getCourtsWithStatuses = async (req, res) => {
             if (!slotsByCourt[courtId]) {
                 slotsByCourt[courtId] = [];
             }
+            const slotStartTimeFormatted = new Date(slot.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            const slotEndTimeFormatted = new Date(slot.endTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
             slotsByCourt[courtId].push({
-                startTime: slot.startTime.toTimeString().slice(0, 5),
-                endTime: slot.endTime.toTimeString().slice(0, 5),
+                startTime: slotStartTimeFormatted,
+                endTime: slotEndTimeFormatted,
                 status: slot.status
             });
         });
@@ -120,7 +128,7 @@ exports.getCourtsWithStatuses = async (req, res) => {
 
         return res.status(200).json({ courts: result });
     } catch (error) {
-        console.error(error);
+        console.error("Error in getCourtsWithStatuses:", error);
         return res.status(500).json({ message: 'Fetch failed', error: error.message });
     }
 };
