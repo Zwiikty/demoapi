@@ -5,6 +5,7 @@ const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 router.post('/', authenticate, authorize(['ADMIN']), courtController.createCourt);
 router.get('/available', courtController.getCourtsWithStatuses);
+router.get('/today', courtController.courtToday);
 router.put('/:courtId', authenticate, authorize(['ADMIN']), courtController.updateCourt);
 router.delete('/:courtId', authenticate, authorize(['ADMIN']), courtController.deleteCourt);
 router.get('/', courtController.getAllCourts);

@@ -216,3 +216,60 @@ exports.updateTimeSlotStatus = async (req, res) => {
         res.status(400).json({ message: "Failed to update status", error: error.message });
     }
 };
+
+exports.courtToday = async (req, res) => {
+    const { date, courtId } = req.query;
+
+    if (!date || !courtId) {
+        return res.status(400).json({ message: 'Missing date or courtId' });
+    }
+
+    try {
+        const selectedDate = new Date(date);
+        if (isNaN(selectedDate.getTime())) {
+            return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
+        }
+
+        const court = await prisma.court.findUnique({
+            where: { id: parseInt(courtId) }
+        });
+
+        if (!court) {
+            return res.status(404).json({ message: 'Court not found' });
+        }
+
+        const slots = await prisma.courtTimeSlot.findMany({
+            where: {
+                courtId: parseInt(courtId),
+                startTime: {
+                    gte: new Date(`${date}T00:00:00`),
+                    lt: new Date(`${date}T23:59:59`)
+                }
+            },
+            orderBy: { startTime: 'asc' },
+            select: {
+                startTime: true,
+                endTime: true,
+                status: true
+            }
+        });
+
+        const formattedSlots = slots.map(slot => ({
+            startTime: slot.startTime.toTimeString().slice(0, 5),
+            endTime: slot.endTime.toTimeString().slice(0, 5),
+            status: slot.status
+        }));
+
+        return res.status(200).json({
+            court: {
+                id: court.id,
+                name: court.name,
+                slots: formattedSlots
+            }
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Fetch failed', error: error.message });
+    }
+};

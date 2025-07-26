@@ -502,158 +502,6 @@ o Success (200):
                 }
             ]
         },
-        {
-            "id": 2,
-            "name": "สนาม 2",
-            "slots": [
-                {
-                    "startTime": "08:00",
-                    "endTime": "09:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "09:00",
-                    "endTime": "10:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "10:00",
-                    "endTime": "11:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "11:00",
-                    "endTime": "12:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "12:00",
-                    "endTime": "13:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "13:00",
-                    "endTime": "14:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "14:00",
-                    "endTime": "15:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "15:00",
-                    "endTime": "16:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "16:00",
-                    "endTime": "17:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "17:00",
-                    "endTime": "18:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "18:00",
-                    "endTime": "19:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "19:00",
-                    "endTime": "20:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "20:00",
-                    "endTime": "21:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "21:00",
-                    "endTime": "22:00",
-                    "status": "AVAILABLE"
-                }
-            ]
-        },
-        {
-            "id": 5,
-            "name": "สนาม 3",
-            "slots": [
-                {
-                    "startTime": "08:00",
-                    "endTime": "09:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "09:00",
-                    "endTime": "10:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "10:00",
-                    "endTime": "11:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "11:00",
-                    "endTime": "12:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "12:00",
-                    "endTime": "13:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "13:00",
-                    "endTime": "14:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "14:00",
-                    "endTime": "15:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "15:00",
-                    "endTime": "16:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "16:00",
-                    "endTime": "17:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "17:00",
-                    "endTime": "18:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "18:00",
-                    "endTime": "19:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "19:00",
-                    "endTime": "20:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "20:00",
-                    "endTime": "21:00",
-                    "status": "AVAILABLE"
-                },
-                {
-                    "startTime": "21:00",
-                    "endTime": "22:00",
-                    "status": "AVAILABLE"
-                }
-            ]
-        },
         ...
     ]
 }
@@ -666,6 +514,100 @@ o Error(500)
     "message": "Fetch failed"
 }
 ```
+## 2.10 Court Today
+**Endpoint**: `api/courts/today?date&courtId (api/courts/today?date=2025-07-28&courtId=7)`
+**Method**: GET
+**Response
+o Success (200): 
+```json
+[
+  {
+    "court": {
+        "id": 7,
+        "name": "สนาม 5",
+        "slots": [
+            {
+                "startTime": "08:00",
+                "endTime": "09:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "09:00",
+                "endTime": "10:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "10:00",
+                "endTime": "11:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "11:00",
+                "endTime": "12:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "12:00",
+                "endTime": "13:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "13:00",
+                "endTime": "14:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "14:00",
+                "endTime": "15:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "15:00",
+                "endTime": "16:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "16:00",
+                "endTime": "17:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "17:00",
+                "endTime": "18:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "18:00",
+                "endTime": "19:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "19:00",
+                "endTime": "20:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "20:00",
+                "endTime": "21:00",
+                "status": "AVAILABLE"
+            },
+            {
+                "startTime": "21:00",
+                "endTime": "22:00",
+                "status": "AVAILABLE"
+            }
+        ]
+    }
+}
+]
+```
+o Error(500)
+```json
+{
+    "message": "Fetch failed"
+}
+```
+
 #######################################
 ### 3 Booking Managament
 ## 3.1 Create Court
