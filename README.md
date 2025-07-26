@@ -418,7 +418,7 @@ o Error(500)
 }
 ```
 ## 2.9 Get Court Avalible
-**Endpoint**: `/api/courts/available?date&startTime (date=2025-07-14&startTime=08.00)` 
+**Endpoint**: `/api/courts/available?date&startTime&endTime (date=2025-07-14&startTime=08:00&endTime=23:00)` 
 **Method**: GET
 **Response
 o Success (200): 
@@ -499,6 +499,16 @@ o Success (200):
                     "startTime": "21:00",
                     "endTime": "22:00",
                     "status": "AVAILABLE"
+                },
+                {
+                    "startTime": "22:00",
+                    "endTime": "23:00",
+                    "status": "UNAVAILABLE"
+                },
+                {
+                    "startTime": "23:00",
+                    "endTime": "00:00",
+                    "status": "UNAVAILABLE"
                 }
             ]
         },

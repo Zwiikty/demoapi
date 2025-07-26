@@ -77,7 +77,7 @@ exports.getCourtsWithStatuses = async (req, res) => {
                 isNaN(hour) || isNaN(minute) ||
                 hour < 0 || hour > 24 || minute !== 0
             ) {
-                throw new Error('Invalid time format. Use HH.00 (e.g. 08.00)');
+                throw new Error('Invalid time format. Use HH:00 (e.g. 08:00)');
             }
             return hour;
         };
@@ -151,11 +151,6 @@ exports.getCourtsWithStatuses = async (req, res) => {
         return res.status(500).json({ message: 'Fetch failed', error: error.message });
     }
 };
-
-
-
-
-
 
 exports.createTimeSlot = async (req, res) => {
   const { courtId } = req.params;
