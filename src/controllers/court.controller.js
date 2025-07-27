@@ -64,10 +64,10 @@ exports.getCourtById = async (req, res) => {
 };
 
 exports.getCourtsWithStatuses = async (req, res) => {
-    const { date, startTime, endTime } = req.query;
+    const { date, startTime, courtId } = req.query;
 
-    if (!date || !startTime || !endTime) {
-        return res.status(400).json({ message: 'Missing date, startTime, or endTime' });
+    if (!date || !startTime) {
+        return res.status(400).json({ message: 'Missing date or startTime' });
     }
 
     try {
@@ -83,14 +83,8 @@ exports.getCourtsWithStatuses = async (req, res) => {
         };
 
         const startHour = parseHour(startTime);
-        const endHour = parseHour(endTime);
-
-        if (endHour <= startHour) {
-            return res.status(400).json({ message: 'endTime must be later than startTime' });
-        }
-
         const allTimeSlots = [];
-        for (let hour = startHour; hour < endHour; hour++) {
+        for (let hour = startHour; hour < 24; hour++) {
             const start = dayjs.tz(`${date} ${hour}:00`, 'Asia/Bangkok');
             const end = start.add(1, 'hour');
             allTimeSlots.push({
@@ -101,7 +95,18 @@ exports.getCourtsWithStatuses = async (req, res) => {
             });
         }
 
-        const courts = await prisma.court.findMany();
+        let courtIds = null;
+        if (courtId) {
+            courtIds = courtId.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        }
+
+        const courts = await prisma.court.findMany({
+            where: courtIds ? { id: { in: courtIds } } : undefined
+        });
+
+        if (courts.length === 0) {
+            return res.status(404).json({ message: 'Court(s) not found' });
+        }
 
         const startOfDay = dayjs.tz(`${date} 00:00`, 'Asia/Bangkok').toDate();
         const endOfDay = dayjs.tz(`${date} 23:59:59`, 'Asia/Bangkok').toDate();
@@ -111,7 +116,8 @@ exports.getCourtsWithStatuses = async (req, res) => {
                 startTime: {
                     gte: startOfDay,
                     lte: endOfDay
-                }
+                },
+                ...(courtIds && { courtId: { in: courtIds } })
             },
             select: {
                 courtId: true,
@@ -151,6 +157,7 @@ exports.getCourtsWithStatuses = async (req, res) => {
         return res.status(500).json({ message: 'Fetch failed', error: error.message });
     }
 };
+
 
 exports.createTimeSlot = async (req, res) => {
   const { courtId } = req.params;
@@ -245,7 +252,7 @@ exports.updateTimeSlotStatus = async (req, res) => {
     }
 };
 
-exports.courtToday = async (req, res) => {
+exports.courtToday = async (req, res) => { //disable
     const { date, courtId } = req.query;
 
     if (!date || !courtId) {

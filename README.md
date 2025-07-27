@@ -418,7 +418,9 @@ o Error(500)
 }
 ```
 ## 2.9 Get Court Avalible
-**Endpoint**: `/api/courts/available?date&startTime&endTime (date=2025-07-14&startTime=08:00&endTime=23:00)` 
+**Endpoint**: `/api/courts/available?date&startTime (date=2025-07-14&startTime=08:00)`
+**select court**: `/api/courts/available?date&startTime&courtId (date=2025-07-14&startTime=08:00&courtId=1)`
+**Multi select court**: `courtId=1,2,...`  
 **Method**: GET
 **Response
 o Success (200): 
