@@ -18,7 +18,7 @@ app.use(cors({
 
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/bookings', require('./routes/booking.routes'));
-app.use('/api/courts', require('./routes/court.routes'));
+//app.use('/api/courts', require('./routes/court.routes'));
 app.use('/api/payment', require('./routes/payment.routes'));
 app.use('/slips', express.static(path.join(__dirname, 'src/uploads/slips')));
 

@@ -22,8 +22,8 @@ async function startServer() {
 
     const courtRoutes = require('./src/routes/court.routes')(io);
     app.use('/api/courts', courtRoutes);
+    
     app.set('io', io);
-
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
       socket.on('disconnect', () => {
