@@ -214,7 +214,7 @@ o Error(500)
 ```
 #######################################
 ### 2 Court Managament
-## 2.1 Create Court
+## 2.1 Create Court (IO)
 **Endpoint**: `/api/courts`
 **Method**: POST
 **Request Headers**:  
@@ -248,7 +248,7 @@ o Error(400)
     "message": "Create failed"
 }
 ```
-## 2.2 Update Court
+## 2.2 Update Court (IO)
 **Endpoint**: `/api/courts/:courtId (/api/court/1) `
 **Method**: POST
 **Request Headers**:  
@@ -279,7 +279,7 @@ o Error(400)
     "message": "Update failed"
 }
 ```
-## 2.3 Delete Court
+## 2.3 Delete Court (IO)
 **Endpoint**: `/api/courts/:courtId (/api/court/1) `
 **Method**: DELETE
 **Response
@@ -336,7 +336,7 @@ o Error(500)
     "message": "Fetch failed"
 }
 ```
-## 2.6 Create Time Slot for Court
+## 2.6 Create Time Slot for Court (IO)
 **Endpoint**: `/api/courts/:courtId/timeslots (/api/courts/1/timeslots)`
 **Method**: POST
 **Request Body Example**:
@@ -366,7 +366,7 @@ o Error(400)
     "message": "Time slot failed"
 }
 ```
-## 2.7 Timeslots Status
+## 2.7 Timeslots Status (IO)
 **Endpoint**: `/api/courts/timeslots/:id/status (/api/courts/timeslots/1/status)`
 **Method**: PATCH
 **Request Body Example**:
@@ -622,7 +622,7 @@ o Error(500)
 
 #######################################
 ### 3 Booking Managament
-## 3.1 Create Court
+## 3.1 Create Bookings
 **Endpoint**: `/api/bookings`
 **Method**: POST
 **Request Headers**:  
@@ -655,7 +655,7 @@ o Error(400)
 ```json
 {
     "message": "Start time must be before end time" (check time booking),
-    "message": 'This time slot is already booked' (overlap Booking)
+    "message": "This time slot is already booked" (overlap Booking)
 }
 ```
 ## 3.2 Upload Slip

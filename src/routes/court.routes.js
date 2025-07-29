@@ -5,6 +5,7 @@ const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 module.exports = (io) => {
     const courtController = require('../controllers/court.controller')(io);
+    
     router.post('/', authenticate, authorize(['ADMIN']), courtController.createCourt);
     router.get('/available', courtController.getCourtsWithStatuses);
     router.get('/today', courtController.courtToday);
