@@ -14,15 +14,12 @@ async function startServer() {
     const server = http.createServer(app);
     const io = new Server(server, {
       cors: {
-        origin: (origin, callback) => {
-          if (!origin || origin.startsWith('http://localhost:')) {
-            return callback(null, true);
-          }
-          callback(new Error('Not allowed by CORS'));
-        },
+        origin: "*",
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
         credentials: true
       }
     });
+
     const courtRoutes = require('./src/routes/court.routes')(io);
     app.use('/api/courts', courtRoutes);
     app.set('io', io);
@@ -33,8 +30,8 @@ async function startServer() {
         console.log('Client disconnected:', socket.id);
       });
     });
-    server.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT}`);
     });
 
   } catch (error) {
