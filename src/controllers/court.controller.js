@@ -160,96 +160,117 @@ module.exports = (io) => {
 
     const getCourtsWithStatuses = async (req, res) => {
         const { date, startTime, courtId } = req.query;
-
         if (!date || !startTime) {
             return res.status(400).json({ message: 'Missing date or startTime' });
         }
 
         try {
             const parseHour = (timeStr) => {
-                const [hour, minute] = timeStr.split(':').map(Number);
-                if (
-                    isNaN(hour) || isNaN(minute) ||
-                    hour < 0 || hour > 24 || minute !== 0
-                ) {
-                    throw new Error('Invalid time format. Use HH:00 (e.g. 08:00)');
-                }
-                return hour;
+            const [hour, minute] = timeStr.split(':').map(Number);
+            if (isNaN(hour) || isNaN(minute) || hour < 0 || hour > 24 || minute !== 0) {
+                throw new Error('Invalid time format. Use HH:00 (e.g. 08:00)');
+            }
+            return hour;
             };
 
-            const startHour = parseHour(startTime);
-            const allTimeSlots = [];
-            for (let hour = startHour; hour < 24; hour++) {
-                const start = dayjs.tz(`${date} ${hour}:00`, 'Asia/Bangkok');
-                const end = start.add(1, 'hour');
-                allTimeSlots.push({
-                    start,
-                    end,
-                    startKey: start.format('HH:mm'),
-                    endKey: end.format('HH:mm')
-                });
-            }
-
-            let courtIds = null;
-            if (courtId) {
-                courtIds = courtId.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-            }
-
-            const courts = await prisma.court.findMany({
-                where: courtIds ? { id: { in: courtIds } } : undefined
-            });
-
-            if (courts.length === 0) {
-                return res.status(404).json({ message: 'Court(s) not found' });
-            }
-
-            const startOfDay = dayjs.tz(`${date} 00:00`, 'Asia/Bangkok').toDate();
-            const endOfDay = dayjs.tz(`${date} 23:59:59`, 'Asia/Bangkok').toDate();
-
-            const slotsFromDB = await prisma.courtTimeSlot.findMany({
-                where: {
-                    startTime: {
-                        gte: startOfDay,
-                        lte: endOfDay
-                    },
-                    ...(courtIds && { courtId: { in: courtIds } })
-                },
-                select: {
-                    courtId: true,
-                    startTime: true,
-                    status: true
-                }
-            });
-
-            const slotMap = {};
-            slotsFromDB.forEach(slot => {
-                const key = `${slot.courtId}_${dayjs(slot.startTime).tz('Asia/Bangkok').format('HH:mm')}`;
-                slotMap[key] = slot.status;
-            });
-
-            const result = courts.map(court => {
-                const slots = allTimeSlots.map(slot => {
-                    const key = `${court.id}_${slot.startKey}`;
-                    const status = slotMap[key] || 'UNAVAILABLE';
-                    return {
-                        startTime: slot.startKey,
-                        endTime: slot.endKey,
-                        status
-                    };
-                });
-
-                return {
-                    id: court.id,
-                    name: court.name,
-                    slots
-                };
-            });
-            return res.status(200).json({ courts: result });
-
-        } catch (error) {
-            console.error(error);
-            return res.status(500).json({ message: 'Fetch failed', error: error.message });
+        const startHour = parseHour(startTime);
+        const allTimeSlots = [];
+        for (let hour = startHour; hour < 24; hour++) {
+        const start = dayjs.tz(`${date} ${hour}:00`, 'Asia/Bangkok');
+        const end = start.add(1, 'hour');
+        allTimeSlots.push({
+            start,
+            end,
+            startKey: start.format('HH:mm'),
+            endKey: end.format('HH:mm')
+        });
         }
+
+        const courtIds = courtId
+        ? courtId.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        : null;
+
+        const courts = await prisma.court.findMany({
+        where: courtIds ? { id: { in: courtIds } } : undefined
+        });
+
+        if (courts.length === 0) {
+        return res.status(404).json({ message: 'Court(s) not found' });
+        }
+
+        const startOfDay = dayjs.tz(`${date} 00:00`, 'Asia/Bangkok').toDate();
+        const endOfDay = dayjs.tz(`${date} 23:59:59`, 'Asia/Bangkok').toDate();
+
+        const [slotsFromDB, bookings] = await Promise.all([
+        prisma.courtTimeSlot.findMany({
+            where: {
+            startTime: { gte: startOfDay, lte: endOfDay },
+            ...(courtIds && { courtId: { in: courtIds } })
+            },
+            select: {
+            courtId: true,
+            startTime: true,
+            status: true
+            }
+        }),
+        prisma.booking.findMany({
+            where: {
+            date: { gte: startOfDay, lte: endOfDay },
+            ...(courtIds && { courtId: { in: courtIds } })
+            },
+            include: {
+            user: {
+                select: {
+                firstName: true,
+                lastName: true
+                }
+            }
+            }
+        })
+        ]);
+
+        const slotMap = {};
+        slotsFromDB.forEach(slot => {
+        const key = `${slot.courtId}_${dayjs(slot.startTime).tz('Asia/Bangkok').format('HH:mm')}`;
+        slotMap[key] = {
+            status: slot.status,
+            bookedBy: null
+        };
+        });
+
+        bookings.forEach(booking => {
+        const key = `${booking.courtId}_${dayjs(booking.startTime).tz('Asia/Bangkok').format('HH:mm')}`;
+        if (slotMap[key] && slotMap[key].status === 'BOOKED') {
+            const { firstName, lastName } = booking.user;
+            slotMap[key].bookedBy = `${firstName} ${lastName}`;
+        }
+        });
+
+        const result = courts.map(court => {
+        const slots = allTimeSlots.map(slot => {
+            const key = `${court.id}_${slot.startKey}`;
+            const data = slotMap[key] || { status: 'UNAVAILABLE', bookedBy: null };
+            return {
+            startTime: slot.startKey,
+            endTime: slot.endKey,
+            status: data.status,
+            bookedBy: data.bookedBy
+            };
+        });
+
+        return {
+            id: court.id,
+            name: court.name,
+            slots
+        };
+        });
+
+        return res.status(200).json({ courts: result });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Fetch failed', error: error.message });
+    }
     };
 
     const getTimeSlots = async (req, res) => {

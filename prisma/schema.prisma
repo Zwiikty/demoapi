@@ -56,6 +56,7 @@ model Booking {
   paymentSlipAmount Float?
   paymentVerified Boolean @default(false)
   paymentConfirmedAt  DateTime?
+  bookingTimeSlots BookingTimeSlot[]
 }
 
 enum BookingStatus {
@@ -71,6 +72,7 @@ model CourtTimeSlot {
   startTime DateTime
   endTime DateTime
   status     SlotStatus @default(AVAILABLE)
+  bookingTimeSlots BookingTimeSlot[]
 }
 
 enum SlotStatus {
@@ -84,4 +86,14 @@ model BookingChangeLog {
   booking Booking @relation(fields: [bookingId], references: [id])
   bookingId Int
   changedAt DateTime @default(now())
+}
+
+model BookingTimeSlot {
+  id             Int             @id @default(autoincrement())
+  booking        Booking         @relation(fields: [bookingId], references: [id])
+  bookingId      Int
+  courtTimeSlot  CourtTimeSlot   @relation(fields: [courtTimeSlotId], references: [id])
+  courtTimeSlotId Int
+
+  @@unique([bookingId, courtTimeSlotId])
 }

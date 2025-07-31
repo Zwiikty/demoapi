@@ -429,92 +429,107 @@ o Success (200):
   {
     "courts": [
         {
-            "id": 1,
-            "name": "สนาม 1",
+            "id": 7,
+            "name": "สนาม 5",
             "slots": [
                 {
                     "startTime": "08:00",
                     "endTime": "09:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "09:00",
                     "endTime": "10:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "10:00",
                     "endTime": "11:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "11:00",
                     "endTime": "12:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "12:00",
                     "endTime": "13:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "13:00",
                     "endTime": "14:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "14:00",
                     "endTime": "15:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "15:00",
                     "endTime": "16:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "16:00",
                     "endTime": "17:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "17:00",
                     "endTime": "18:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "18:00",
                     "endTime": "19:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "19:00",
                     "endTime": "20:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "20:00",
                     "endTime": "21:00",
-                    "status": "AVAILABLE"
+                    "status": "AVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "21:00",
                     "endTime": "22:00",
-                    "status": "AVAILABLE"
+                    "status": "BOOKED",
+                    "bookedBy": "User Peter"
                 },
                 {
                     "startTime": "22:00",
                     "endTime": "23:00",
-                    "status": "UNAVAILABLE"
+                    "status": "UNAVAILABLE",
+                    "bookedBy": null
                 },
                 {
                     "startTime": "23:00",
                     "endTime": "00:00",
-                    "status": "UNAVAILABLE"
+                    "status": "UNAVAILABLE",
+                    "bookedBy": null
                 }
             ]
-        },
-        ...
+        }
     ]
 }
   ...
@@ -712,7 +727,7 @@ o Error(500)
     "message": "Fetch failed"
 }
 ```
-## 3.4 Update Booking Status
+## 3.4 Update Booking Status //disable
 **Endpoint**: `/api/bookings/:bookingId/status`
 **Method**: PUT
 **Request Headers**:  
@@ -943,5 +958,45 @@ o Error(500)
 ```json
 {
     "message": "Rejection failed
+}
+```
+## 4.5 Get Bookings info
+**Endpoint**: `/api/bookings`
+**Method**: GET
+**Request Headers**:  
+- `Authorization: Bearer <Admin_token>`
+**Response
+o Success (200): 
+```json
+[
+  [
+    {
+        "id": 4,
+        "userId": 1,
+        "courtId": 7,
+        "date": "2025-08-31T00:00:00.000Z",
+        "startTime": "2025-08-31T13:00:00.000Z",
+        "endTime": "2025-08-31T14:00:00.000Z",
+        "status": "APPROVE",
+        "slipImage": "1753933172469-369940555.JPG",
+        "createAt": "2025-07-31T03:38:19.363Z",
+        "updateAt": "2025-07-31T05:15:51.436Z",
+        "rescheduledFromId": null,
+        "paymentSlipAmount": 70,
+        "paymentVerified": true,
+        "paymentConfirmedAt": "2025-07-31T05:15:51.435Z",
+        "user": {
+            "firstName": "PP",
+            "lastName": "AI"
+        }
+    },
+    ...
+]
+]
+```
+o Error(500)
+```json
+{
+    "message": "Fetch failed"
 }
 ```

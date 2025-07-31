@@ -73,34 +73,71 @@ exports.readAmountFromSlip = async (req, res) => {
 
 exports.adminVerifyPayment = async (req, res) => {
     const { bookingId } = req.body;
+
     try {
         const booking = await prisma.booking.update({
             where: { id: parseInt(bookingId) },
-                data: {
-                    status: 'APPROVE',
-                    paymentVerified: true,
-                    paymentConfirmedAt: new Date(),
-                },
-            });
-        res.status(200).json({ message: 'Payment verified by admin', booking });
+            data: {
+                status: 'APPROVE',
+                paymentVerified: true,
+                paymentConfirmedAt: new Date(),
+            },
+        });
+
+        const bookingTimeSlots = await prisma.bookingTimeSlot.findMany({
+            where: { bookingId: booking.id },
+            include: { courtTimeSlot: true }
+        });
+
+        const updatePromises = bookingTimeSlots.map(slot =>
+            prisma.courtTimeSlot.update({
+                where: { id: slot.courtTimeSlotId },
+                data: { status: 'BOOKED' }
+            })
+        );
+
+        await Promise.all(updatePromises);
+
+        res.status(200).json({ message: 'Payment verified and time slots booked', booking });
+
     } catch (error) {
         res.status(500).json({ message: 'Verification failed', error: error.message });
     }
 };
 
+
 exports.adminRejectedPayment = async (req, res) => {
     const { bookingId } = req.body;
+
     try {
         const booking = await prisma.booking.update({
             where: { id: parseInt(bookingId) },
-                data: {
-                    status: 'REJECTED',
-                    paymentVerified: false,
-                    paymentConfirmedAt: null,
-                },
-            });
-        res.status(200).json({ message: 'Payment rejected by admin', booking });
+            data: {
+                status: 'REJECTED',
+                paymentVerified: false,
+                paymentConfirmedAt: null,
+            },
+        });
+
+        const bookingTimeSlots = await prisma.bookingTimeSlot.findMany({
+            where: { bookingId: booking.id },
+            include: { courtTimeSlot: true }
+        });
+
+        const updatePromises = bookingTimeSlots.map(slot =>
+            prisma.courtTimeSlot.update({
+                where: { id: slot.courtTimeSlotId },
+                data: { status: 'AVAILABLE' }
+            })
+        );
+
+        await Promise.all(updatePromises);
+
+        res.status(200).json({ message: 'Payment rejected and time slots released', booking });
+
     } catch (error) {
         res.status(500).json({ message: 'Rejection failed', error: error.message });
     }
-}
+};
+
+

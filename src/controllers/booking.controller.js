@@ -8,6 +8,7 @@ dayjs.extend(timezone);
 exports.createBooking = async (req, res) => {
     const { courtId, date, startTime, endTime } = req.body;
     const userId = req.user.id;
+
     const startDateTime = dayjs.tz(`${date}T${startTime}`, 'Asia/Bangkok').toDate();
     const endDateTime = dayjs.tz(`${date}T${endTime}`, 'Asia/Bangkok').toDate();
 
@@ -26,23 +27,43 @@ exports.createBooking = async (req, res) => {
                 }]
             }
         });
+
         if (overlappingBooking) {
-            return res.status(400).json({ message: 'This time slot is already booked'});
+            return res.status(400).json({ message: 'This time slot is already booked' });
         }
-        const booking = await prisma.booking.create ({
+
+        const booking = await prisma.booking.create({
             data: {
                 userId,
-                courtId,
+                courtId: parseInt(courtId),
                 date: new Date(date),
                 startTime: startDateTime,
                 endTime: endDateTime,
             }
         });
-        res.status(201).json({ message: 'Booking crated', booking });
+
+        const matchingTimeSlots = await prisma.courtTimeSlot.findMany({
+            where: {
+                courtId: parseInt(courtId),
+                startTime: { gte: startDateTime },
+                endTime: { lte: endDateTime },
+                status: 'AVAILABLE'
+            }
+        });
+
+        await prisma.bookingTimeSlot.createMany({
+            data: matchingTimeSlots.map(slot => ({
+                bookingId: booking.id,
+                courtTimeSlotId: slot.id
+            }))
+        });
+
+        res.status(201).json({ message: 'Booking created', booking });
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
 };
+
 
 exports.uploadSlip = async (req, res) => {
     const { bookingId } = req.params;
@@ -150,7 +171,13 @@ exports.rescheduleBooking = async (req, res) => {
 exports.getAllBookings = async (req, res) => {
     try {
         const bookings = await prisma.booking.findMany({
-            include: { user: true, court: true },
+            include: { user: {
+                select: {
+                    firstName: true,
+                    lastName: true
+                    }
+                } 
+            },
             orderBy: { date: 'desc' }
         });
         res.status(200).json(bookings);
