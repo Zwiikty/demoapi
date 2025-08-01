@@ -23,6 +23,8 @@ app.use('/api/bookings', require('./routes/booking.routes'));
 app.use('/api/payment', require('./routes/payment.routes'));
 app.use('/slips', express.static(ImagePath));
 
+console.log('Static files served from:', ImagePath);
+
 
 module.exports = app;
 
