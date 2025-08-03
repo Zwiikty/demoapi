@@ -4,7 +4,7 @@ const app = express();
 const path = require('path');
 const cors = require('cors');
 const ImagePath = path.resolve(__dirname, 'uploads/slips');
-console.log('Static files served from:', ImagePath);
+//console.log('Static files served from:', ImagePath);
 
 app.use(express.json());
 app.use(cors({

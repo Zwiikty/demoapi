@@ -669,8 +669,12 @@ o Success (201):
 o Error(400)
 ```json
 {
-    "message": "Start time must be before end time" (check time booking),
-    "message": "This time slot is already booked" (overlap Booking)
+    "message": "No available time slots for this range" (check time slots),
+    "message": "Some of the selected time slots are already booked" (overlap Booking)
+}
+o Error(500)
+{
+  "message": "Booking failed"
 }
 ```
 ## 3.2 Upload Slip

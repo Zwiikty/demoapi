@@ -8,30 +8,31 @@ dayjs.extend(timezone);
 exports.createBooking = async (req, res) => {
     const { courtId, date, startTime, endTime } = req.body;
     const userId = req.user.id;
-
     const startDateTime = dayjs.tz(`${date}T${startTime}`, 'Asia/Bangkok').toDate();
     const endDateTime = dayjs.tz(`${date}T${endTime}`, 'Asia/Bangkok').toDate();
-
     if (startDateTime >= endDateTime) {
         return res.status(400).json({ message: 'Start time must be before end time' });
     }
-
     try {
-        const overlappingBooking = await prisma.booking.findFirst({
+        const matchingTimeSlots = await prisma.courtTimeSlot.findMany({
             where: {
                 courtId: parseInt(courtId),
-                date: new Date(date),
-                OR: [{
-                    startTime: { lt: endDateTime },
-                    endTime: { gt: startDateTime },
-                }]
+                startTime: { gte: startDateTime },
+                endTime: { lte: endDateTime },
             }
         });
-
-        if (overlappingBooking) {
-            return res.status(400).json({ message: 'This time slot is already booked' });
+        if (matchingTimeSlots.length === 0) {
+            return res.status(400).json({ message: 'No available time slots for this range' });
         }
-
+        const slotIds = matchingTimeSlots.map(slot => slot.id);
+        const bookedSlots = await prisma.bookingTimeSlot.findFirst({
+            where: {
+                courtTimeSlotId: { in: slotIds }
+            }
+        });
+        if (bookedSlots) {
+            return res.status(400).json({ message: 'Some of the selected time slots are already booked' });
+        }
         const booking = await prisma.booking.create({
             data: {
                 userId,
@@ -41,28 +42,20 @@ exports.createBooking = async (req, res) => {
                 endTime: endDateTime,
             }
         });
-
-        const matchingTimeSlots = await prisma.courtTimeSlot.findMany({
-            where: {
-                courtId: parseInt(courtId),
-                startTime: { gte: startDateTime },
-                endTime: { lte: endDateTime },
-                status: 'AVAILABLE'
-            }
-        });
-
         await prisma.bookingTimeSlot.createMany({
-            data: matchingTimeSlots.map(slot => ({
+            data: slotIds.map(id => ({
                 bookingId: booking.id,
-                courtTimeSlotId: slot.id
+                courtTimeSlotId: id
             }))
         });
 
-        res.status(201).json({ message: 'Booking created', booking });
+        res.status(201).json({ message: 'Booking created successfully', booking });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        console.error(error);
+        res.status(500).json({ message: 'Booking failed', error: error.message });
     }
 };
+
 
 
 exports.uploadSlip = async (req, res) => {
@@ -87,11 +80,32 @@ exports.uploadSlip = async (req, res) => {
 
 exports.getMyBookings = async (req, res) => {
     const userId = req.user.id;
+
     try {
         const bookings = await prisma.booking.findMany({
-            where: { userId },
-            include: { court: true },
-            orderBy: { date: 'desc' }
+        where: { userId },
+        include: {
+            court: {
+            select: {
+                name: true,
+                location: true,
+                pricePerHour: true
+            }
+            },
+            bookingTimeSlots: {
+            select: {
+                courtTimeSlot: {
+                select: {
+                    startTime: true,
+                    endTime: true
+                }
+                }
+            }
+            }
+        },
+        orderBy: {
+            date: 'desc'
+        }
         });
         res.status(200).json(bookings);
     } catch (error) {
@@ -195,3 +209,4 @@ exports.adminCancelBooking = async (req, res) => {
         res.status(500).json({ message: 'Cancel failed', error: error.message });
     }
 };
+
