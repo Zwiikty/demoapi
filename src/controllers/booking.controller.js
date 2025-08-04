@@ -48,6 +48,15 @@ exports.createBooking = async (req, res) => {
                 courtTimeSlotId: id
             }))
         });
+        const io = req.app.get('io');
+        io.to('admins').emit('new-booking', {
+            bookingId: booking.id,
+            userId: booking.userId,
+            courtId: booking.courtId,
+            date: booking.date,
+            startTime: booking.startTime,
+            endTime: booking.endTime
+        });
 
         res.status(201).json({ message: 'Booking created successfully', booking });
     } catch (error) {
@@ -55,8 +64,6 @@ exports.createBooking = async (req, res) => {
         res.status(500).json({ message: 'Booking failed', error: error.message });
     }
 };
-
-
 
 exports.uploadSlip = async (req, res) => {
     const { bookingId } = req.params;
@@ -71,7 +78,22 @@ exports.uploadSlip = async (req, res) => {
                 slipImage,
                 status: 'PENDING',
             },
+            include: {
+                user: true,
+                court: true
+            }
         });
+        const io = req.app.get('io');
+        io.to('admins').emit('slip-uploaded', {
+            bookingId: booking.id,
+            userId: booking.userId,
+            slipImage: booking.slipImage,
+            status: booking.status,
+            userName: booking.user.name,
+            courtName: booking.court.name,
+            time: { start: booking.startTime, end: booking.endTime }
+        });
+
         res.status(200).json({ message: 'Slip uploaded', booking });
     } catch (error) {
         res.status(400).json({ message: 'Upload failed', error: error.message });
@@ -113,7 +135,7 @@ exports.getMyBookings = async (req, res) => {
     }
 };
 
-exports.updateStatus = async (req, res) => {
+exports.updateStatus = async (req, res) => { //disable
     const { bookingId } = req.params;
     const { status } = req.body;
     if (!['APPROVE', 'REJECTED'].includes(status)) {

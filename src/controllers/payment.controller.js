@@ -82,6 +82,7 @@ exports.adminVerifyPayment = async (req, res) => {
                 paymentVerified: true,
                 paymentConfirmedAt: new Date(),
             },
+            include: { court: true }
         });
 
         const bookingTimeSlots = await prisma.bookingTimeSlot.findMany({
@@ -97,6 +98,14 @@ exports.adminVerifyPayment = async (req, res) => {
         );
 
         await Promise.all(updatePromises);
+        const io = req.app.get('io');
+        io.to(`user_${booking.userId}`).emit('payment-approved', {
+            bookingId: booking.id,
+            courtName: booking.court.name,
+            status: booking.status,
+            startTime: booking.startTime,
+            endTime: booking.endTime
+        });
 
         res.status(200).json({ message: 'Payment verified and time slots booked', booking });
 
@@ -117,6 +126,7 @@ exports.adminRejectedPayment = async (req, res) => {
                 paymentVerified: false,
                 paymentConfirmedAt: null,
             },
+            include: { court: true }
         });
 
         const bookingTimeSlots = await prisma.bookingTimeSlot.findMany({
@@ -132,6 +142,15 @@ exports.adminRejectedPayment = async (req, res) => {
         );
 
         await Promise.all(updatePromises);
+        const io = req.app.get('io');
+        io.to(`user_${booking.userId}`).emit('payment-reject', {
+        bookingId: booking.id,
+        courtName: booking.court.name,
+        status: booking.status,
+        reason: reason || 'Slip verification failed',
+        startTime: booking.startTime,
+        endTime: booking.endTime
+        });
 
         res.status(200).json({ message: 'Payment rejected and time slots released', booking });
 

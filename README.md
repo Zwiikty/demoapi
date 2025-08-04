@@ -1004,3 +1004,23 @@ o Error(500)
     "message": "Fetch failed"
 }
 ```
+#######################################
+### 5 Notification
+```
+**request jwt**
+```
+## 5.1 create booking noti
+**Socket name**: `new-booking (admins)`
+```
+```
+## 5.2 slip uploaded noti
+**Socket name**: `slip-uploaded (admins)`
+```
+```
+## 5.3 payment approve noti
+**Socket name**: `payment-approved (user)`
+```
+```
+## 5.4 payment reject noti
+**Socket name**: `payment-reject (user)`
+```
