@@ -57,6 +57,7 @@ model Booking {
   paymentVerified Boolean @default(false)
   paymentConfirmedAt  DateTime?
   bookingTimeSlots BookingTimeSlot[]
+  notiBeforeUse Int?
 }
 
 enum BookingStatus {
@@ -77,6 +78,7 @@ model CourtTimeSlot {
 
 enum SlotStatus {
   AVAILABLE
+  UNAVAILABLE
   BOOKED
   MAINTENANCE
 }

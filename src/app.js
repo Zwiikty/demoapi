@@ -23,6 +23,8 @@ app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/bookings', require('./routes/booking.routes'));
 //app.use('/api/courts', require('./routes/court.routes'));
 app.use('/api/payment', require('./routes/payment.routes'));
+const notiRoutes = require('./routes/noti.routes');
+app.use('/api/notification', notiRoutes);
 
 
 module.exports = app;

@@ -1,9 +1,10 @@
 const prisma = require('../../prisma/client');
-const dayjs = require('dayjs');
-const utc = require('dayjs/plugin/utc');
+const dayjs = require('../utils/dayjs_th');
+/*const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
 dayjs.extend(utc);
 dayjs.extend(timezone);
+*/
 
 exports.createBooking = async (req, res) => {
     const { courtId, date, startTime, endTime } = req.body;
@@ -48,6 +49,15 @@ exports.createBooking = async (req, res) => {
                 courtTimeSlotId: id
             }))
         });
+        await prisma.courtTimeSlot.updateMany({
+            where: {
+                id: { in: slotIds}
+            },
+            data: {
+                status: 'UNAVAILABLE'
+            }
+        });
+
         const io = req.app.get('io');
         io.to('admins').emit('new-booking', {
             bookingId: booking.id,

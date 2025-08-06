@@ -679,7 +679,7 @@ o Error(500)
 ```
 ## 3.2 Upload Slip
 **Endpoint**: `/api/bookings/upload-slip/:bookingId (/api/bookings/upload-slip/2)`
-**Method**: POST
+**Method**: PUT
 **Request Headers**:  
 - `Authorization: Bearer <User_token>`
 - `Form-Data: slip <file: image/png>`
@@ -1011,16 +1011,42 @@ o Error(500)
 ```
 ## 5.1 create booking noti
 **Socket name**: `new-booking (admins)`
-```
-```
 ## 5.2 slip uploaded noti
 **Socket name**: `slip-uploaded (admins)`
-```
-```
 ## 5.3 payment approve noti
 **Socket name**: `payment-approved (user)`
-```
-```
 ## 5.4 payment reject noti
 **Socket name**: `payment-reject (user)`
+## 5.5 notification alert
+**Endpoint**: `/api/notification/noti-setting/:bookingId`
+**Method**: PUT
+**Request Headers**:  
+- `Authorization: Bearer <Customer_token>`
+```json
+[
+  {
+    "notiBeforeUse": 30 (min)
+  }
+]
+```
+**Response
+o Success (200): 
+```json
+[
+  {
+    "message": "อัปเดตการแจ้งเตือนสำเร็จ"
+  }
+]
+```
+o Error(400)
+```json
+{
+    "message": "กรุณากรอกเวลาล่วงหน้าเป็นนาที (ขั้นต่ำ 5 นาที)"
+}
+```
+o Error(500)
+```json
+{
+    "message": "เกิดข้อผิดพลาด"
+}
 ```

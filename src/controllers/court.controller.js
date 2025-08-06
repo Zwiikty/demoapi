@@ -1,9 +1,10 @@
 const prisma = require('../../prisma/client');
-const dayjs = require('dayjs');
-const utc = require('dayjs/plugin/utc');
+const dayjs = require('../utils/dayjs_th');
+/*const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
 dayjs.extend(utc);
 dayjs.extend(timezone);
+*/
 
 module.exports = (io) => {
     // --- ฟังก์ชันที่ใช้ Socket.IO ---
@@ -115,7 +116,7 @@ module.exports = (io) => {
         const { id } = req.params;
         const { status } = req.body;
 
-        if (!["AVAILABLE", "BOOKED", "MAINTENANCE"].includes(status)) {
+        if (!["AVAILABLE", "UNAVAILABLE", "BOOKED", "MAINTENANCE"].includes(status)) {
             return res.status(400).json({ message: "Invalid status" });
         }
 
@@ -249,7 +250,7 @@ module.exports = (io) => {
         const result = courts.map(court => {
         const slots = allTimeSlots.map(slot => {
             const key = `${court.id}_${slot.startKey}`;
-            const data = slotMap[key] || { status: 'UNAVAILABLE', bookedBy: null };
+            const data = slotMap[key] || { status: 'CLOSE', bookedBy: null };
             return {
             startTime: slot.startKey,
             endTime: slot.endKey,

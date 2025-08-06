@@ -3,7 +3,6 @@ const app = require('./src/app');
 const http = require('http');
 const prisma = require('./prisma/client');
 const { Server } = require('socket.io');
-const socketAuthMiddleware = require('./src/middleware/socketauth.middleware');
 const { disconnect } = require('process');
 const PORT = process.env.PORT || 3000;
 
@@ -23,9 +22,14 @@ async function startServer() {
 
     const courtRoutes = require('./src/routes/court.routes')(io);
     app.use('/api/courts', courtRoutes);
-    
+  
     app.set('io', io);
+
+    const socketAuthMiddleware = require('./src/middleware/socketauth.middleware');
     socketAuthMiddleware(io);
+    const setupNotificationScheduler = require('./src/controllers/notiSchedur.controller');
+    setupNotificationScheduler(io);
+
     io.on('connection', (socket) => {
       if (!socket.user) {
         console.log('Unauthenticated socket tried to connect');
