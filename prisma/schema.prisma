@@ -20,6 +20,7 @@ model User {
   resetToken    String?
   resetTokenExp DateTime?
   bookings      Booking[]
+  
 }
 
 enum Role {
@@ -34,6 +35,7 @@ model Court {
   pricePerHour Float
   bookings     Booking[]
   timeSlots    CourtTimeSlot[]
+  walkInBooking WalkInBooking[]
 }
 
 model Booking {
@@ -92,10 +94,31 @@ model BookingChangeLog {
 
 model BookingTimeSlot {
   id             Int             @id @default(autoincrement())
-  booking        Booking         @relation(fields: [bookingId], references: [id])
-  bookingId      Int
+  booking        Booking?         @relation(fields: [bookingId], references: [id])
+  bookingId      Int?
   courtTimeSlot  CourtTimeSlot   @relation(fields: [courtTimeSlotId], references: [id])
   courtTimeSlotId Int
-
+  walkInBooking WalkInBooking?    @relation(fields: [walkInBookingId], references: [id])
+  walkInBookingId Int?
   @@unique([bookingId, courtTimeSlotId])
+}
+
+model WalkInBooking {
+  id         Int           @id @default(autoincrement())
+  court      Court         @relation(fields: [courtId], references: [id])
+  courtId    Int
+  date       DateTime
+  startTime  DateTime
+  endTime    DateTime
+  fullName   String
+  people     Int
+  status     WalkInStatus @default(APPROVE)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  bookingTimeSlots BookingTimeSlot[]
+}
+
+enum WalkInStatus {
+  APPROVE
+  CANCEL
 }

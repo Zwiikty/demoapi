@@ -541,100 +541,6 @@ o Error(500)
     "message": "Fetch failed"
 }
 ```
-## 2.10 Court Today
-**Endpoint**: `api/courts/today?date&courtId (api/courts/today?date=2025-07-28&courtId=7)`
-**Method**: GET
-**Response
-o Success (200): 
-```json
-[
-  {
-    "court": {
-        "id": 7,
-        "name": "สนาม 5",
-        "slots": [
-            {
-                "startTime": "08:00",
-                "endTime": "09:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "09:00",
-                "endTime": "10:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "10:00",
-                "endTime": "11:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "11:00",
-                "endTime": "12:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "12:00",
-                "endTime": "13:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "13:00",
-                "endTime": "14:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "14:00",
-                "endTime": "15:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "15:00",
-                "endTime": "16:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "16:00",
-                "endTime": "17:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "17:00",
-                "endTime": "18:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "18:00",
-                "endTime": "19:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "19:00",
-                "endTime": "20:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "20:00",
-                "endTime": "21:00",
-                "status": "AVAILABLE"
-            },
-            {
-                "startTime": "21:00",
-                "endTime": "22:00",
-                "status": "AVAILABLE"
-            }
-        ]
-    }
-}
-]
-```
-o Error(500)
-```json
-{
-    "message": "Fetch failed"
-}
-```
-
 #######################################
 ### 3 Booking Managament
 ## 3.1 Create Bookings
@@ -731,33 +637,50 @@ o Error(500)
     "message": "Fetch failed"
 }
 ```
-## 3.4 Update Booking Status //disable
-**Endpoint**: `/api/bookings/:bookingId/status`
-**Method**: PUT
+## 3.4 Create Walk-In Bookings
+**Endpoint**: `/api/bookings/walkin`
+**Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <Admin_token>`
 **Request Body Example**:
 ```json
 {
-  "status": "APPROVE" // or "REJECTED"
+    "courtId": 2,
+    "date": "2025-08-31",
+    "startTime": "17:00",
+    "endTime": "18:00",
+    "fullName": "AA BB",
+    "people": 4
 }
 ```
 **Response
-o Success (200): 
+o Success (201): 
 ```json
 {
-  "message": "Booking approve",
-  "booking": {
-    "id": 5,
-    "status": "APPROVE"
-  }
+    "message": "Walk-in booking created successfully",
+    "walkInBooking": {
+        "id": 6,
+        "courtId": 2,
+        "date": "2025-08-31T00:00:00.000Z",
+        "startTime": "2025-08-31T06:00:00.000Z",
+        "endTime": "2025-08-31T07:00:00.000Z",
+        "fullName": "CC DD",
+        "people": 5,
+        "status": "APPROVE",
+        "createdAt": "2025-08-09T03:48:15.388Z",
+        "updatedAt": "2025-08-09T03:48:15.388Z"
+    }
 }
-
 ```
-o Error(500)
+o Error(400)
 ```json
 {
-    "message": "Fetch failed"
+    "message": "No available time slots for this range" (check time slots),
+    "message": "Some of the selected time slots are already booked" (overlap Booking)
+}
+o Error(500)
+{
+  "message": "Booking failed"
 }
 ```
 ## 3.5 Reschedule Booking
