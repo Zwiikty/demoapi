@@ -20,7 +20,8 @@ model User {
   resetToken    String?
   resetTokenExp DateTime?
   bookings      Booking[]
-  
+  points        Int       @default(0)
+  pointLedger   PointLedger[]
 }
 
 enum Role {
@@ -60,6 +61,7 @@ model Booking {
   paymentConfirmedAt  DateTime?
   bookingTimeSlots BookingTimeSlot[]
   notiBeforeUse Int?
+  pointLedger PointLedger?
 }
 
 enum BookingStatus {
@@ -121,4 +123,15 @@ model WalkInBooking {
 enum WalkInStatus {
   APPROVE
   CANCEL
+}
+
+model PointLedger {
+  id               Int       @id @default(autoincrement())
+  user             User      @relation(fields: [userId], references: [id])
+  userId           Int
+  booking          Booking?  @relation(fields: [bookingId], references: [id])
+  bookingId        Int?      @unique
+  points           Int
+  reason           String?
+  createdAt        DateTime  @default(now())
 }

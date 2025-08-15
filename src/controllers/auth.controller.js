@@ -98,7 +98,8 @@ exports.WhoAmI = async (req, res) => {
                 firstName: true,
                 lastName: true,
                 email: true,
-                phone: true
+                phone: true,
+                points: true
             }
         });
 
@@ -109,7 +110,8 @@ exports.WhoAmI = async (req, res) => {
         res.status(200).json({
             name: `${user.firstName} ${user.lastName}`,
             email: user.email,
-            phone: user.phone
+            phone: user.phone,
+            points: user.points
         });
     } catch (error) {
         res.status(500).json({ message: 'Failed to fetch user info', error: error.message });

@@ -242,3 +242,112 @@ exports.adminCancelBooking = async (req, res) => {
     }
 };
 
+exports.getBookingSummary = async (req, res) => {
+  try {
+    const { date, month } = req.query;
+    let startDate, endDate, periodType;
+
+    if (date) {
+      periodType = 'daily';
+      startDate = dayjs.tz(`${date} 00:00`, 'Asia/Bangkok').toDate();
+      endDate   = dayjs.tz(`${date} 23:59:59`, 'Asia/Bangkok').toDate();
+    } else if (month) {
+      periodType = 'monthly';
+      const m = month.length === 7 ? `${month}-01` : month;
+      const base = dayjs.tz(`${m} 00:00`, 'Asia/Bangkok');
+      startDate = base.startOf('month').toDate();
+      endDate   = base.endOf('month').toDate();
+    } else {
+      periodType = 'daily';
+      const now = dayjs.tz(new Date(), 'Asia/Bangkok');
+
+      startDate = now.startOf('day').toDate();
+      endDate   = now.endOf('day').toDate();
+    }
+
+    const bookingWhere = {
+      date: { gte: startDate, lte: endDate },
+      // status: 'APPROVE',
+      // paymentVerified: true,
+    };
+
+    const bookingAgg = await prisma.booking.groupBy({
+      by: ['courtId'],
+      where: bookingWhere,
+      _count: { courtId: true },
+      _sum: { paymentSlipAmount: true },
+    });
+
+    const walkInRows = await prisma.walkInBooking.findMany({
+      where: { date: { gte: startDate, lte: endDate } },
+      include: { court: { select: { pricePerHour: true } } },
+    });
+
+    const walkInByCourt = new Map();
+    for (const w of walkInRows) {
+      const hours = (new Date(w.endTime) - new Date(w.startTime)) / (1000 * 60 * 60);
+      const revenue = (w.court?.pricePerHour || 0) * Math.max(0, hours);
+      const prev = walkInByCourt.get(w.courtId) || { count: 0, revenue: 0 };
+      walkInByCourt.set(w.courtId, {
+        count: prev.count + 1,
+        revenue: prev.revenue + revenue,
+      });
+    }
+
+    const courts = await prisma.court.findMany({ select: { id: true, name: true } });
+
+    const details = courts.map(c => {
+      const b = bookingAgg.find(x => x.courtId === c.id);
+      const w = walkInByCourt.get(c.id);
+
+      const bookingsCount = b?._count?.courtId || 0;
+      const walkInsCount  = w?.count || 0;
+      const bookingsRevenue = b?._sum?.paymentSlipAmount || 0;
+      const walkInsRevenue  = w?.revenue || 0;
+
+      return {
+        courtId: c.id,
+        courtName: c.name,
+        bookings: bookingsCount,
+        walkIns: walkInsCount,
+        total: bookingsCount + walkInsCount,
+        revenue: {
+          bookings: bookingsRevenue,
+          walkIns: walkInsRevenue,
+          total: bookingsRevenue + walkInsRevenue,
+        },
+      };
+    });
+
+    const summary = details.reduce(
+      (acc, d) => {
+        acc.totalBookings += d.bookings;
+        acc.totalWalkIns  += d.walkIns;
+        acc.totalAll      += d.total;
+        acc.revenue.bookings += d.revenue.bookings;
+        acc.revenue.walkIns  += d.revenue.walkIns;
+        acc.revenue.total    += d.revenue.total;
+        return acc;
+      },
+      {
+        totalBookings: 0,
+        totalWalkIns: 0,
+        totalAll: 0,
+        revenue: { bookings: 0, walkIns: 0, total: 0 },
+      }
+    );
+
+    return res.json({
+      period: {
+        type: periodType,
+        start: dayjs(startDate).tz('Asia/Bangkok').format('YYYY-MM-DD HH:mm:ss'),
+        end: dayjs(endDate).tz('Asia/Bangkok').format('YYYY-MM-DD HH:mm:ss'),
+      },
+      summary,
+      details,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server Error', error: err.message });
+  }
+};

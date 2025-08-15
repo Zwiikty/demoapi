@@ -169,7 +169,8 @@ o Success (200):
 {
     "name": "ice sun",
     "email": "ice@example.com",
-    "phone": "1234567890"
+    "phone": "1234567890",
+    "point": 1
 }
 ```
 o Error(500)
@@ -610,7 +611,7 @@ o Error(400)
 }
 ```
 ## 3.3 Get my Bookings
-**Endpoint**: `/api/bookings/me`
+**Endpoint**: `/api/bookings/my-bookings`
 **Method**: GET
 **Request Headers**:  
 - `Authorization: Bearer <User_token>`
@@ -973,3 +974,98 @@ o Error(500)
     "message": "เกิดข้อผิดพลาด"
 }
 ```
+#######################################
+### 6 Dashboard
+## 6.1 booking dashboard
+**Endpoint**: `/api/bookings/summary`
+**Method**: GET
+**Request Headers**:  
+- `Authorization: Bearer <Admin_token>`
+```json
+[
+  "(default: daily ) (date = ใส่วันที่ต้องการดู) (month = ดูทั้งเดือน)"
+  {
+    "date": "2025-08-31", 
+    "month": "2025-08"
+  }
+]
+```
+**Response
+o Success (200): 
+```json
+[
+  {
+      {
+      "period": {
+          "type": "monthly",
+          "date": null,
+          "month": "2025-08"
+      },
+      "summary": {
+          "totalBookings": 2,
+          "totalWalkIns": 7,
+          "totalAll": 9
+      },
+      "details": [
+          {
+              "courtId": 1,
+              "courtName": "สนาม 1",
+              "daily": null,
+              "monthly": {
+                  "bookings": 1,
+                  "walkIns": 3,
+                  "total": 4
+              }
+          },
+          {
+              "courtId": 2,
+              "courtName": "สนาม 2",
+              "daily": null,
+              "monthly": {
+                  "bookings": 1,
+                  "walkIns": 4,
+                  "total": 5
+              }
+          },
+          {
+              "courtId": 5,
+              "courtName": "สนาม 3",
+              "daily": null,
+              "monthly": {
+                  "bookings": 0,
+                  "walkIns": 0,
+                  "total": 0
+              }
+          },
+          {
+              "courtId": 6,
+              "courtName": "สนาม 4",
+              "daily": null,
+              "monthly": {
+                  "bookings": 0,
+                  "walkIns": 0,
+                  "total": 0
+              }
+          },
+          {
+              "courtId": 7,
+              "courtName": "สนาม 5",
+              "daily": null,
+              "monthly": {
+                  "bookings": 0,
+                  "walkIns": 0,
+                  "total": 0
+              }
+          }
+      ]
+    }
+  }
+]
+```
+o Error(500)
+```json
+{
+    "message": "Server error"
+}
+```
+

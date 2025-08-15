@@ -9,6 +9,7 @@ router.post('/', authenticate, authorize(['CUSTOMER']), bookingController.create
 const { createWalkInBooking } = require('../controllers/walkin.controller');
 router.post('/walkin', authenticate, authorize(['ADMIN']), createWalkInBooking);
 
+router.get('/summary', authenticate, authorize(['ADMIN']), bookingController.getBookingSummary);
 router.get('/my-bookings', authenticate, authorize(['CUSTOMER']), bookingController.getMyBookings);
 router.put('/update-status/:bookingId', authenticate, authorize(['ADMIN']), bookingController.updateStatus);
 router.put('/rescheduled/:bookingId', authenticate, authorize(['CUSTOMER']), bookingController.rescheduleBooking);

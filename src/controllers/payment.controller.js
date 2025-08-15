@@ -72,91 +72,147 @@ exports.readAmountFromSlip = async (req, res) => {
 };
 
 exports.adminVerifyPayment = async (req, res) => {
-    const { bookingId } = req.body;
+  const { bookingId } = req.body;
 
-    try {
-        const booking = await prisma.booking.update({
-            where: { id: parseInt(bookingId) },
-            data: {
-                status: 'APPROVE',
-                paymentVerified: true,
-                paymentConfirmedAt: new Date(),
-            },
-            include: { court: true }
+  try {
+    const { booking, pointsGranted } = await prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.update({
+        where: { id: parseInt(bookingId) },
+        data: {
+          status: 'APPROVE',
+          paymentVerified: true,
+          paymentConfirmedAt: new Date(),
+        },
+        include: { court: true },
+      });
+      const bookingTimeSlots = await tx.bookingTimeSlot.findMany({
+        where: { bookingId: booking.id },
+        select: { courtTimeSlotId: true },
+      });
+
+      const slotIds = bookingTimeSlots.map(s => s.courtTimeSlotId);
+      if (slotIds.length > 0) {
+        await tx.courtTimeSlot.updateMany({
+          where: { id: { in: slotIds } },
+          data: { status: 'BOOKED' },
         });
+      }
 
-        const bookingTimeSlots = await prisma.bookingTimeSlot.findMany({
-            where: { bookingId: booking.id },
-            include: { courtTimeSlot: true }
-        });
+      const points = bookingTimeSlots.length;
+      const existingLedger = await tx.pointLedger.findUnique({
+        where: { bookingId: booking.id },
+      });
 
-        const updatePromises = bookingTimeSlots.map(slot =>
-            prisma.courtTimeSlot.update({
-                where: { id: slot.courtTimeSlotId },
-                data: { status: 'BOOKED' }
-            })
-        );
-
-        await Promise.all(updatePromises);
-        const io = req.app.get('io');
-        io.to(`user_${booking.userId}`).emit('payment-approved', {
+      if (!existingLedger && points > 0) {
+        await tx.pointLedger.create({
+          data: {
+            userId: booking.userId,
             bookingId: booking.id,
-            courtName: booking.court.name,
-            status: booking.status,
-            startTime: booking.startTime,
-            endTime: booking.endTime
+            points,
+            reason: 'Booking approved',
+          },
         });
+        await tx.user.update({
+          where: { id: booking.userId },
+          data: { points: { increment: points } },
+        });
+      }
 
-        res.status(200).json({ message: 'Payment verified and time slots booked', booking });
+      return { booking, pointsGranted: existingLedger ? 0 : points };
+    });
 
-    } catch (error) {
-        res.status(500).json({ message: 'Verification failed', error: error.message });
-    }
+    const io = req.app.get('io');
+    io.to(`user_${booking.userId}`).emit('payment-approved', {
+      bookingId: booking.id,
+      courtName: booking.court.name,
+      status: booking.status,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      pointsAdded: pointsGranted,
+    });
+
+    res.status(200).json({
+      message: 'Payment verified, time slots booked, points granted (idempotent).',
+      booking,
+      pointsGranted,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Verification failed', error: error.message });
+  }
 };
 
-
 exports.adminRejectedPayment = async (req, res) => {
-    const { bookingId } = req.body;
+  const { bookingId, reason } = req.body;
 
-    try {
-        const booking = await prisma.booking.update({
-            where: { id: parseInt(bookingId) },
-            data: {
-                status: 'REJECTED',
-                paymentVerified: false,
-                paymentConfirmedAt: null,
-            },
-            include: { court: true }
+  try {
+    const { booking, pointsReverted } = await prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.update({
+        where: { id: parseInt(bookingId) },
+        data: {
+          status: 'REJECTED',
+          paymentVerified: false,
+          paymentConfirmedAt: null,
+        },
+        include: { court: true },
+      });
+      const bookingTimeSlots = await tx.bookingTimeSlot.findMany({
+        where: { bookingId: booking.id },
+        select: { courtTimeSlotId: true },
+      });
+      const slotIds = bookingTimeSlots.map(s => s.courtTimeSlotId);
+      if (slotIds.length > 0) {
+        await tx.courtTimeSlot.updateMany({
+          where: { id: { in: slotIds } },
+          data: { status: 'AVAILABLE' },
+        });
+      }
+
+      const ledger = await tx.pointLedger.findUnique({
+        where: { bookingId: booking.id },
+      });
+
+      let reverted = 0;
+      if (ledger) {
+        reverted = ledger.points;
+
+        const user = await tx.user.findUnique({
+          where: { id: booking.userId },
+          select: { points: true },
         });
 
-        const bookingTimeSlots = await prisma.bookingTimeSlot.findMany({
-            where: { bookingId: booking.id },
-            include: { courtTimeSlot: true }
+        const decrementBy = Math.min(user.points, ledger.points);
+
+        await tx.pointLedger.delete({ where: { id: ledger.id } });
+        await tx.user.update({
+          where: { id: booking.userId },
+          data: { points: { decrement: decrementBy } },
         });
+      }
 
-        const updatePromises = bookingTimeSlots.map(slot =>
-            prisma.courtTimeSlot.update({
-                where: { id: slot.courtTimeSlotId },
-                data: { status: 'AVAILABLE' }
-            })
-        );
+      return { booking, pointsReverted: reverted };
+    });
 
-        await Promise.all(updatePromises);
-        const io = req.app.get('io');
-        io.to(`user_${booking.userId}`).emit('payment-reject', {
-        bookingId: booking.id,
-        courtName: booking.court.name,
-        status: booking.status,
-        reason: reason || 'Slip verification failed',
-        startTime: booking.startTime,
-        endTime: booking.endTime
-        });
+    const io = req.app.get('io');
+    io.to(`user_${booking.userId}`).emit('payment-reject', {
+      bookingId: booking.id,
+      courtName: booking.court.name,
+      status: booking.status,
+      reason: reason || 'Slip verification failed',
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      pointsReverted,
+    });
 
-        res.status(200).json({ message: 'Payment rejected and time slots released', booking });
-
-    } catch (error) {
-        res.status(500).json({ message: 'Rejection failed', error: error.message });
-    }
+    res.status(200).json({
+      message: 'Payment rejected, time slots released, points reverted if existed.',
+      booking,
+      pointsReverted,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Rejection failed', error: error.message });
+  }
 };
 
 
