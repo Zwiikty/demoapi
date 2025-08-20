@@ -28,47 +28,73 @@ exports.generatePromptPayQR = async (req, res) => {
     }
 };
 
+const _fetch = global.fetch || ((...args) =>
+  import('node-fetch').then(({ default: fetch }) => fetch(...args))
+);
+
 exports.readAmountFromSlip = async (req, res) => {
-    const { imagePath, bookingId } = req.body;
-    const fullPath = path.join(__dirname, '../uploads/slips/', imagePath);
-    try {
-        const result = await Tesseract.recognize(fullPath, 'eng', { 
-            logger: m => console.log(m) 
-        });
-        const text = result.data.text;
-        const matches = text.match(/\d+\.\d{2}/g);
-        const amount = matches ? Math.max(...matches.map(m => parseFloat(m))) : null;
-        if (!amount) return res.status(400).json({ message: 'Amount not found' });
-        
-        const booking = await prisma.booking.findUnique({
-            where: { id: parseInt(bookingId) },
-            include: { court: true },
-        });
-        if (!booking) {
-            return res.status(404).json({ message: 'Booking not found' });
-        }
-        const durationHours = (new Date(booking.endTime) - new Date(booking.startTime)) / (1000 * 60 * 60);
-        const expectedAmount = booking.court.pricePerHour * durationHours;
+  const { imagePath, bookingId } = req.body;
 
-        const updateBooking = await prisma.booking.update({
-            where: { id: booking.id },
-            data: {
-                paymentSlipAmount: amount,
-                paymentVerified: false,
-                paymentConfirmedAt: null,
-            },
-        });
+  try {
+    // สร้าง URL ที่เข้าถึงไฟล์จริง
+    const fileUrl = `${req.protocol}://${req.get('host')}/slips/${imagePath}`;
+    console.log("OCR File URL:", fileUrl);
 
-        res.status(200).json({ 
-            amount, 
-            expectedAmount, 
-            booking, 
-            updateBooking,
-            message: 'Amount read from slip and saved. Awaiting admin verification.'
-        });
-    } catch (error) {
-        res.status(500).json({ message: 'OCR failed', error: error.message });
+    // โหลดไฟล์จาก URL เป็น buffer
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      return res.status(400).json({ message: 'Cannot fetch slip image' });
     }
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    // ส่ง buffer เข้า OCR
+    const result = await Tesseract.recognize(buffer, 'eng+tha', {
+      logger: m => console.log(m)
+    });
+
+    const text = result.data.text;
+    console.log("OCR Text:", text);
+
+    // หาจำนวนเงิน (รูปแบบ 1234.56)
+    const matches = text.match(/\d+\.\d{2}/g);
+    const amount = matches ? Math.max(...matches.map(m => parseFloat(m))) : null;
+    if (!amount) {
+      return res.status(400).json({ message: 'Amount not found', ocrText: text });
+    }
+
+    // --- ตรวจสอบ booking ---
+    const booking = await prisma.booking.findUnique({
+      where: { id: parseInt(bookingId) },
+      include: { court: true },
+    });
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    const durationHours = (new Date(booking.endTime) - new Date(booking.startTime)) / (1000 * 60 * 60);
+    const expectedAmount = booking.court.pricePerHour * durationHours;
+
+    const updateBooking = await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        paymentSlipAmount: amount,
+        paymentVerified: false,
+        paymentConfirmedAt: null,
+      },
+    });
+
+    res.status(200).json({
+      amount,
+      expectedAmount,
+      booking,
+      updateBooking,
+      message: 'Amount read from slip via URL and saved. Awaiting admin verification.'
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'OCR failed', error: error.message });
+  }
 };
 
 exports.adminVerifyPayment = async (req, res) => {
