@@ -104,77 +104,68 @@ exports.readAmountFromSlip = async (req, res) => {
     const rawText = result.data.text || '';
     const text = normalizeOcrText(rawText);
 
-    // แตกเป็นบรรทัดเพื่อทำ keyword scoring
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    // ----- หลังจากได้ const text = normalizeOcrText(result.data.text || ''); แล้ว -----
 
-    // คีย์เวิร์ดที่พบบ่อยในสลิป
-    const keywords = [
-      'ยอด', 'ยอดชำระ', 'รวม', 'ชำระ', 'โอน', 'จำนวนเงิน',
-      'amount', 'total', 'paid', 'payment', 'transfer'
-    ];
+const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-    // รวบรวมผู้ต้องสงสัย (candidates)
-    const candidates = [];
+// คีย์เวิร์ดที่พบบ่อยบนสลิป
+const keywordLabels = [
+  'ยอดชำระ', 'ยอด', 'จำนวนเงิน', 'จำนวน', 'รวม', 'รวมทั้งสิ้น',
+  'amount', 'total', 'paid', 'payment', 'transfer'
+];
 
-    // 1) หา pattern 1,234.56 หรือ 1234.56
-    const rx1 = /\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2}/g;
+// helper: ดึงเลขทศนิยมทั้งหมดจากสตริง (เช่น 1,234.56 / 1234.56)
+const findDecimals = (s) => (s.match(/\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2}/g) || [])
+  .map(m => parseFloat(m.replace(/,/g,'')))
+  .filter(n => Number.isFinite(n));
 
-    // 2) หาเลขยาว ๆ แล้วเดาทศนิยม (เช่น 123456 -> 1234.56)
-    const rx2 = /\b\d{4,}\b/g;
-
-    lines.forEach((line, idx) => {
-      const normalized = line.replace(/[^\d.,\- ]/g, ''); // เก็บเฉพาะตัวเลข จุด คอมมา ช่องว่าง
-      // จับแบบมีทศนิยมก่อน
-      const m1 = normalized.match(rx1) || [];
-      m1.forEach(m => {
-        const val = toAmount(m);
-        if (val != null) {
-          // คะแนนจาก keyword ใกล้เคียง
-          const score =
-            keywords.some(k => line.toLowerCase().includes(k)) ? 2 : 1;
-          candidates.push({ val, source: 'decimal', line: idx, score, raw: m });
-        }
-      });
-      // ถ้าบรรทัดไม่มีทศนิยม ลองเดา
-      const m2 = normalized.match(rx2) || [];
-      m2.forEach(m => {
-        // ตัดตัวเลขติดลบ/มั่ว
-        if (/^-/.test(m)) return;
-        const val = inferDecimal(m);
-        if (val != null) {
-          const score =
-            keywords.some(k => line.toLowerCase().includes(k)) ? 1 : 0; // เดาให้คะแนนน้อยกว่า
-          candidates.push({ val, source: 'infer', line: idx, score, raw: m });
-        }
-      });
+// 1) เก็บ candidates จากบรรทัดที่มี "คีย์เวิร์ด"
+const labelled = [];
+lines.forEach((line, idx) => {
+  const lower = line.toLowerCase();
+  if (keywordLabels.some(k => lower.includes(k))) {
+    const nums = findDecimals(line);
+    nums.forEach(n => {
+      // ตัด outliers ที่ไม่น่าใช่ยอด (กำหนดคร่าว ๆ)
+      if (n > 0 && n < 100000) {
+        labelled.push({ val: n, line: idx, kind: 'labelled', raw: line });
+      }
     });
+  }
+});
 
-    if (candidates.length === 0) {
-      return res.status(400).json({ message: 'Amount not found', ocrText: text });
+// 2) ถ้ามี labelled ให้เลือก "ค่าที่น้อยที่สุด" ก่อน (สลิปไทยหลายเจ้าใส่ยอดไว้ตัวเล็ก)
+if (labelled.length > 0) {
+  labelled.sort((a, b) => a.val - b.val);
+  chosen = labelled[0];
+} else {
+  // 3) ถ้าไม่มี labelled ให้มองทุกบรรทัด หาเลขทศนิยมที่สมเหตุสมผล แล้วเลือก "ค่าที่น้อยที่สุด"
+  const allDecimals = lines.flatMap((line, idx) =>
+    findDecimals(line).map(n => ({ val: n, line: idx, raw: line }))
+  ).filter(c => c.val > 0 && c.val < 100000);
+
+  if (allDecimals.length > 0) {
+    // ลองดูว่ามีตัวที่เข้าใกล้ expectedAmount ใน ±15% ไหม (ถ้ามี expectedAmount)
+    let picked = null;
+    if (Number.isFinite(expectedAmount) && expectedAmount > 0) {
+      const near = allDecimals
+        .map(c => ({ ...c, diff: Math.abs(c.val - expectedAmount) }))
+        .filter(c => Math.abs(c.val - expectedAmount) <= expectedAmount * 0.15)
+        .sort((a, b) => a.diff - b.diff);
+
+      if (near.length > 0) picked = near[0];
     }
+    // ถ้าไม่มีที่ใกล้ expected → ใช้ "ค่าที่น้อยที่สุด" แทน
+    chosen = picked || allDecimals.sort((a, b) => a.val - b.val)[0];
+  }
+}
 
-    // เลือกคำตอบ:
-    // 1) ถ้ามีค่าที่ใกล้ expectedAmount ภายใน ±15% ให้เอาค่านั้น
-    const within = candidates
-      .map(c => ({ ...c, diff: Math.abs(c.val - expectedAmount) }))
-      .filter(c => expectedAmount > 0
-        ? Math.abs(c.val - expectedAmount) <= expectedAmount * 0.15
-        : true // ถ้า expectedAmount=0 ไม่ filter
-      )
-      .sort((a, b) => (b.score - a.score) || (a.diff - b.diff));
+// 4) ถ้ายังไม่มี chosen จริง ๆ ก็ให้แจ้งไม่พบ (กรณี OCR เละมาก)
+if (!chosen) {
+  return res.status(400).json({ message: 'Amount not found', ocrText: text });
+}
 
-    let chosen;
-    if (within.length > 0) {
-      chosen = within[0];
-    } else {
-      // 2) มิฉะนั้น เลือกจากคะแนนมากสุด แล้วค่อยเลือกค่ามากสุดในกลุ่มคะแนนเดียวกัน
-      const maxScore = Math.max(...candidates.map(c => c.score));
-      const top = candidates.filter(c => c.score === maxScore);
-      // ถ้าเท่ากันหมด เอาค่ามากสุด (มักเป็นยอดรวม)
-      chosen = top.sort((a, b) => b.val - a.val)[0];
-    }
-
-    const amount = chosen.val;
+const amount = chosen.val;
 
     // เซฟลง booking
     const updateBooking = await prisma.booking.update({
