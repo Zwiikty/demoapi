@@ -33,11 +33,44 @@ const _fetch = global.fetch || ((...args) =>
   import('node-fetch').then(({ default: fetch }) => fetch(...args))
 );
 
+function normalizeOcrText(s) {
+  if (!s) return '';
+  // แก้ตัวที่ OCR ชอบสลับกับตัวเลข
+  return s
+    .replace(/O/g, '0')
+    .replace(/o/g, '0')
+    .replace(/S/g, '5')
+    .replace(/s/g, '5')
+    .replace(/[Il]/g, '1')   // I, l -> 1
+    .replace(/B/g, '8')
+    .replace(/—|–|−/g, '-')  // dash variants
+    ;
+}
+
+// แปลงสตริงตัวเลขที่มีคอมมาหรือช่องว่างให้เป็น float
+function toAmount(str) {
+  if (!str) return null;
+  const cleaned = str.replace(/\s/g, '').replace(/,/g, '');
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+// เดา 2 หลักท้ายเป็นสตางค์ ถ้าไม่มีจุดทศนิยม (เช่น 123456 => 1234.56)
+function inferDecimal(str) {
+  const digits = str.replace(/\D/g, '');
+  if (digits.length >= 3) {
+    const whole = digits.slice(0, -2);
+    const dec = digits.slice(-2);
+    return parseFloat(`${whole}.${dec}`);
+  }
+  return null;
+}
+
 exports.readAmountFromSlip = async (req, res) => {
   const { imagePath, bookingId } = req.body;
 
   try {
-    // โหลดรูปจาก static URL บน Railway (อย่าดึงจากไฟล์ระบบ)
+    // โหลดรูปจาก static URL บน Railway
     const fileUrl = `${req.protocol}://${req.get('host')}/slips/${imagePath}`;
     const resp = await _fetch(fileUrl);
     if (!resp.ok) {
@@ -45,29 +78,105 @@ exports.readAmountFromSlip = async (req, res) => {
     }
     const buffer = Buffer.from(await resp.arrayBuffer());
 
-    // OCR ด้วย eng ตามสูตรเดิม (แม่นสุดกับสลิปของคุณ)
-    const result = await Tesseract.recognize(buffer, 'eng', {
-      logger: m => console.log(m)
-    });
-
-    const text = result.data.text || '';
-    // ดึงจำนวนเงินรูปแบบ 1234.56 แล้วเอาค่าสูงสุด (ตามเดิม)
-    const matches = text.match(/\d+\.\d{2}/g);
-    const amount = matches ? Math.max(...matches.map(m => parseFloat(m))) : null;
-    if (!amount) {
-      return res.status(400).json({ message: 'Amount not found', ocrText: text });
-    }
-
-    // ดึง booking + court เพื่อคำนวณ expectedAmount
+    // ดึง booking + court เพื่อคำนวณ expectedAmount (ใช้ช่วย disambiguate)
     const booking = await prisma.booking.findUnique({
       where: { id: parseInt(bookingId) },
       include: { court: true },
     });
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
 
-    const durationHours = (new Date(booking.endTime) - new Date(booking.startTime)) / (1000 * 60 * 60);
+    const durationHours =
+      (new Date(booking.endTime) - new Date(booking.startTime)) / (1000 * 60 * 60);
     const expectedAmount = booking.court.pricePerHour * durationHours;
 
+    // OCR: ใช้ eng+tha, PSM 6, ใส่ whitelist เน้นตัวเลข/จุด/คอมมา/สัญลักษณ์เงิน
+    const result = await Tesseract.recognize(buffer, 'eng+tha', {
+      logger: m => console.log(m),
+      tessedit_char_whitelist: '0123456789,.-฿฿ฺ฿฿THB',
+    }, {
+      // ค่าพารามิเตอร์แบบ OEM/PSM ผ่าน configs (รองรับใน tesseract.js รุ่นใหม่)
+      // ถ้าเวอร์ชันคุณไม่รองรับ object ที่ 3 ให้ตัดบล็อกนี้ทิ้ง
+      // จะใช้ default PSM 3/6 ก็ยังได้ผลใกล้เคียง
+      // NOTE: บางเวอร์ชันต้องใช้ { config: { tessedit_pageseg_mode: 6 } }
+      // ลองตามเวอร์ชันที่ใช้งานจริง
+    });
+
+    const rawText = result.data.text || '';
+    const text = normalizeOcrText(rawText);
+
+    // แตกเป็นบรรทัดเพื่อทำ keyword scoring
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    // คีย์เวิร์ดที่พบบ่อยในสลิป
+    const keywords = [
+      'ยอด', 'ยอดชำระ', 'รวม', 'ชำระ', 'โอน', 'จำนวนเงิน',
+      'amount', 'total', 'paid', 'payment', 'transfer'
+    ];
+
+    // รวบรวมผู้ต้องสงสัย (candidates)
+    const candidates = [];
+
+    // 1) หา pattern 1,234.56 หรือ 1234.56
+    const rx1 = /\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2}/g;
+
+    // 2) หาเลขยาว ๆ แล้วเดาทศนิยม (เช่น 123456 -> 1234.56)
+    const rx2 = /\b\d{4,}\b/g;
+
+    lines.forEach((line, idx) => {
+      const normalized = line.replace(/[^\d.,\- ]/g, ''); // เก็บเฉพาะตัวเลข จุด คอมมา ช่องว่าง
+      // จับแบบมีทศนิยมก่อน
+      const m1 = normalized.match(rx1) || [];
+      m1.forEach(m => {
+        const val = toAmount(m);
+        if (val != null) {
+          // คะแนนจาก keyword ใกล้เคียง
+          const score =
+            keywords.some(k => line.toLowerCase().includes(k)) ? 2 : 1;
+          candidates.push({ val, source: 'decimal', line: idx, score, raw: m });
+        }
+      });
+      // ถ้าบรรทัดไม่มีทศนิยม ลองเดา
+      const m2 = normalized.match(rx2) || [];
+      m2.forEach(m => {
+        // ตัดตัวเลขติดลบ/มั่ว
+        if (/^-/.test(m)) return;
+        const val = inferDecimal(m);
+        if (val != null) {
+          const score =
+            keywords.some(k => line.toLowerCase().includes(k)) ? 1 : 0; // เดาให้คะแนนน้อยกว่า
+          candidates.push({ val, source: 'infer', line: idx, score, raw: m });
+        }
+      });
+    });
+
+    if (candidates.length === 0) {
+      return res.status(400).json({ message: 'Amount not found', ocrText: text });
+    }
+
+    // เลือกคำตอบ:
+    // 1) ถ้ามีค่าที่ใกล้ expectedAmount ภายใน ±15% ให้เอาค่านั้น
+    const within = candidates
+      .map(c => ({ ...c, diff: Math.abs(c.val - expectedAmount) }))
+      .filter(c => expectedAmount > 0
+        ? Math.abs(c.val - expectedAmount) <= expectedAmount * 0.15
+        : true // ถ้า expectedAmount=0 ไม่ filter
+      )
+      .sort((a, b) => (b.score - a.score) || (a.diff - b.diff));
+
+    let chosen;
+    if (within.length > 0) {
+      chosen = within[0];
+    } else {
+      // 2) มิฉะนั้น เลือกจากคะแนนมากสุด แล้วค่อยเลือกค่ามากสุดในกลุ่มคะแนนเดียวกัน
+      const maxScore = Math.max(...candidates.map(c => c.score));
+      const top = candidates.filter(c => c.score === maxScore);
+      // ถ้าเท่ากันหมด เอาค่ามากสุด (มักเป็นยอดรวม)
+      chosen = top.sort((a, b) => b.val - a.val)[0];
+    }
+
+    const amount = chosen.val;
+
+    // เซฟลง booking
     const updateBooking = await prisma.booking.update({
       where: { id: booking.id },
       data: {
@@ -82,8 +191,13 @@ exports.readAmountFromSlip = async (req, res) => {
       expectedAmount,
       booking,
       updateBooking,
+      debug: {
+        picked: chosen,
+        candidates: candidates.slice(0, 5), // ตัดเหลือดูง่าย ๆ
+      },
       message: 'Amount read from slip via URL and saved. Awaiting admin verification.'
     });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'OCR failed', error: error.message });
