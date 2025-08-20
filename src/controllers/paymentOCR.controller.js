@@ -8,7 +8,7 @@ const Tesseract = require('tesseract.js');
 // const isHttpUrl = s => /^https?:\/\//i.test(s);
 
 // --- FIXED MOUNT PATH (Railway Volume) ---
-const FIXED_UPLOADS_DIR = 'uploads/slips';
+const FIXED_UPLOADS_DIR = '/app/src/uploads/slips';
 
 /* ----------------------- Image Preprocess ----------------------- */
 async function preprocessBottom(bufOrPath, {
