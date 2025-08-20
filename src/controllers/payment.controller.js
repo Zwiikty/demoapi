@@ -27,7 +27,7 @@ exports.generatePromptPayQR = async (req, res) => {
         res.status(500).json({ message: 'QR generation failed', error: error.message });
     }
 };
-
+/*
 exports.readAmountFromSlip = async (req, res) => {
   const { imagePath, bookingId } = req.body;
   const fullPath = path.join(__dirname, "../uploads/slips/", imagePath);
@@ -138,7 +138,7 @@ exports.readAmountFromSlip = async (req, res) => {
     res.status(500).json({ message: "OCR failed", error: error.message });
   }
 };
-
+*/
 exports.adminVerifyPayment = async (req, res) => {
   const { bookingId } = req.body;
 
