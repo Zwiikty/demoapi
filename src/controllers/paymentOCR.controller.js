@@ -3,9 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const Tesseract = require('tesseract.js');
-// (ถ้าต้องการรองรับ URL ให้ uncomment 2 บรรทัดด้านล่าง แล้ว npm i axios)
-// const axios = require('axios');
-// const isHttpUrl = s => /^https?:\/\//i.test(s);
+const prisma = require('../../prisma/client'); // ← เพิ่ม Prisma
 
 // --- FIXED MOUNT PATH (Railway Volume) ---
 const FIXED_UPLOADS_DIR = '/app/src/uploads/slips';
@@ -83,39 +81,23 @@ function scoreCandidate(item, lines) {
   return Math.max(score, -10);
 }
 
-/* ----------------------- Controller: OCR amount only ----------------------- */
+/* -------- Controller: OCR amount only + update Booking.paymentSlipAmount -------- */
 exports.readAmountFromSlip = async (req, res) => {
   try {
-    const { imagePath } = req.body;
+    const { imagePath, bookingId } = req.body;
     if (!imagePath) return res.status(400).json({ message: 'Missing imagePath' });
+    if (!bookingId) return res.status(400).json({ message: 'Missing bookingId' });
 
-    // ========== เตรียมอินพุต ==========
-    let inputForPreprocess;
-    // ---- ถ้าต้องการรองรับ URL ให้ใช้บล็อกนี้แทนและ uncomment axios กับ isHttpUrl ด้านบน ----
-    // if (isHttpUrl(imagePath)) {
-    //   const resp = await axios.get(imagePath, { responseType: 'arraybuffer' });
-    //   inputForPreprocess = Buffer.from(resp.data);
-    // } else {
-    //   const full = path.isAbsolute(imagePath)
-    //     ? imagePath
-    //     : path.join(FIXED_UPLOADS_DIR, imagePath);
-    //   if (!fs.existsSync(full)) {
-    //     return res.status(404).json({ message: 'Image not found', path: full });
-    //   }
-    //   inputForPreprocess = full;
-    // }
-
-    // ---- เวอร์ชันไม่รองรับ URL (อ่านจาก volume ตามที่กำหนดเท่านั้น) ----
+    // ========== เตรียมอินพุตจาก Railway Volume ==========
     const full = path.isAbsolute(imagePath)
       ? imagePath
       : path.join(FIXED_UPLOADS_DIR, imagePath);
     if (!fs.existsSync(full)) {
       return res.status(404).json({ message: 'Image not found', path: full });
     }
-    inputForPreprocess = full;
 
-    // ========== Preprocess: ครอปล่าง + grayscale + threshold + upscale ==========
-    const preprocessed = await preprocessBottom(inputForPreprocess);
+    // ========== Preprocess ==========
+    const preprocessed = await preprocessBottom(full);
 
     // ========== OCR ==========
     const result = await Tesseract.recognize(preprocessed, 'eng+tha', {
@@ -127,6 +109,7 @@ exports.readAmountFromSlip = async (req, res) => {
 
     // ========== Extract amount ==========
     const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(sanitizeLine);
+
     const candidates = [];
     lines.forEach((line, idx) => {
       const nums = extractDecimals(line);
@@ -163,7 +146,7 @@ exports.readAmountFromSlip = async (req, res) => {
       }
     }
 
-    // fallback: หาเลขทศนิยมตัวแรกๆ ที่ > 0 จากทุกบรรทัดรวมกัน
+    // fallback
     if (!chosen) {
       const fallback = extractDecimals(lines.join(' ')).filter(x => x.val > 0);
       if (fallback.length) chosen = { line: -1, context: '(fallback)', ...fallback[0], score: -1 };
@@ -174,10 +157,31 @@ exports.readAmountFromSlip = async (req, res) => {
     }
 
     const amount = Number(chosen.val.toFixed(2));
+
+    // ========== อัปเดต Booking.paymentSlipAmount ==========
+    const booking = await prisma.booking.findUnique({
+      where: { id: Number(bookingId) },
+      select: { id: true }, // ดึงเท่าที่จำเป็น
+    });
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    const updated = await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        paymentSlipAmount: amount,
+        paymentVerified: false,     // ให้แอดมินตรวจอีกที
+        paymentConfirmedAt: null,   // ยังไม่คอนเฟิร์ม
+      },
+      select: { id: true, paymentSlipAmount: true, paymentVerified: true, paymentConfirmedAt: true },
+    });
+
     return res.status(200).json({
       amount,
+      booking: updated,
       debug: { chosen, candidates, lines, mountPath: FIXED_UPLOADS_DIR },
-      message: 'Amount read from slip (OCR only). Admin verification required.',
+      message: 'Amount read from slip and saved to booking. Awaiting admin verification.',
     });
   } catch (err) {
     console.error(err);
