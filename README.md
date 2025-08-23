@@ -800,15 +800,15 @@ o Error(500)
 }
 ```
 ## 4.2 Read Amount From Slip (OCR)
-**Endpoint**: `/api/payment/generate-qr`
+**Endpoint**: `/api/payment/ocr-read`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <Admin_token>`
 **Request Body Example**:
 ```json
 {
-  "imagePath": "slip_123.jpg",
-  "bookingId": 5
+    "imagePath": "1755692240790-674606756.JPG",
+    "bookingId": 35
 }
 ```
 **Response

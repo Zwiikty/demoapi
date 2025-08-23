@@ -3,15 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const Tesseract = require('tesseract.js');
-const prisma = require('../../prisma/client'); // ← เพิ่ม Prisma
-
-// --- FIXED MOUNT PATH (Railway Volume) ---
+const prisma = require('../../prisma/client');
 const FIXED_UPLOADS_DIR = '/app/src/uploads/slips';
 
-/* ----------------------- Image Preprocess ----------------------- */
 async function preprocessBottom(bufOrPath, {
-  cropBottomRatio = 0.35, // ครอปล่าง ~35% ลดโอกาสอ่าน "เวลา"
-  upscale = 2.0           // ขยาย 2x ช่วย OCR
+  cropBottomRatio = 0.35, 
+  upscale = 2.0 
 } = {}) {
   const img = sharp(bufOrPath);
   const meta = await img.metadata();
@@ -21,13 +18,12 @@ async function preprocessBottom(bufOrPath, {
     .extract({ left: 0, top: h - cropH, width: w, height: cropH })
     .greyscale()
     .normalize()
-    .threshold(0) // Otsu-like global
+    .threshold(0)
     .resize(Math.round(w * upscale), Math.round(cropH * upscale), { kernel: 'lanczos3' })
     .png()
     .toBuffer();
 }
 
-/* ----------------------- OCR Helpers ----------------------- */
 function thaiDigitsToArabic(s) {
   const map = { '๐':'0','๑':'1','๒':'2','๓':'3','๔':'4','๕':'5','๖':'6','๗':'7','๘':'8','๙':'9' };
   return s.replace(/[๐-๙]/g, ch => map[ch] ?? ch);
@@ -53,7 +49,6 @@ function isTimeLike(s) {
   if (/\b\d{1,2}\/\d{1,2}\/\d{2,4}.*\d{1,2}[:.]\d{2}/.test(L)) return true;
   return false;
 }
-// ยอมรับ '.' หรือ ':' เป็นคั่นทศนิยม แล้วแปลง ':' ตอน parse
 function extractDecimals(line) {
   const re = /\b\d{1,3}(?:[ ,]\d{3})*[.:]\d{2}\b|\b\d+[.:]\d{2}\b/g;
   const out = [];
@@ -65,7 +60,6 @@ function extractDecimals(line) {
   return out;
 }
 
-/* ----------------------- Heuristics ----------------------- */
 const POS_KEYS = ['จำนวนเงิน','จำนวน','ยอดชำระ','ยอดโอน','ยอดรวม','ยอดสุทธิ','รวมทั้งสิ้น','รวม','payment','paid','amount','total','transfer'].map(x=>x.toLowerCase());
 const UNIT_KEYS = ['บาท','thb'];
 const NEG_KEYS = ['ค่าธรรมเนียม','fee','charge','reference','เลขที่รายการ','ref','รายการอ้างอิง','อ้างอิง','เวลา','time','สแกนตรวจสอบสลิป','scan','qr','เลขที่','transaction id','trx','หมายเลขอ้างอิง'].map(x=>x.toLowerCase());
@@ -81,35 +75,25 @@ function scoreCandidate(item, lines) {
   return Math.max(score, -10);
 }
 
-/* -------- Controller: OCR amount only + update Booking.paymentSlipAmount -------- */
 exports.readAmountFromSlip = async (req, res) => {
   try {
     const { imagePath, bookingId } = req.body;
     if (!imagePath) return res.status(400).json({ message: 'Missing imagePath' });
     if (!bookingId) return res.status(400).json({ message: 'Missing bookingId' });
-
-    // ========== เตรียมอินพุตจาก Railway Volume ==========
     const full = path.isAbsolute(imagePath)
       ? imagePath
       : path.join(FIXED_UPLOADS_DIR, imagePath);
     if (!fs.existsSync(full)) {
       return res.status(404).json({ message: 'Image not found', path: full });
     }
-
-    // ========== Preprocess ==========
     const preprocessed = await preprocessBottom(full);
-
-    // ========== OCR ==========
     const result = await Tesseract.recognize(preprocessed, 'eng+tha', {
       tessedit_pageseg_mode: 6,
       tessedit_char_whitelist: '0123456789.,:/-()abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ฿บาทTHBน.',
       logger: m => console.log('[tesseract]', m?.status || m),
     });
     const rawText = result?.data?.text || '';
-
-    // ========== Extract amount ==========
     const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(sanitizeLine);
-
     const candidates = [];
     lines.forEach((line, idx) => {
       const nums = extractDecimals(line);
@@ -146,7 +130,6 @@ exports.readAmountFromSlip = async (req, res) => {
       }
     }
 
-    // fallback
     if (!chosen) {
       const fallback = extractDecimals(lines.join(' ')).filter(x => x.val > 0);
       if (fallback.length) chosen = { line: -1, context: '(fallback)', ...fallback[0], score: -1 };
@@ -158,10 +141,9 @@ exports.readAmountFromSlip = async (req, res) => {
 
     const amount = Number(chosen.val.toFixed(2));
 
-    // ========== อัปเดต Booking.paymentSlipAmount ==========
     const booking = await prisma.booking.findUnique({
       where: { id: Number(bookingId) },
-      select: { id: true }, // ดึงเท่าที่จำเป็น
+      select: { id: true },
     });
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
@@ -171,8 +153,8 @@ exports.readAmountFromSlip = async (req, res) => {
       where: { id: booking.id },
       data: {
         paymentSlipAmount: amount,
-        paymentVerified: false,     // ให้แอดมินตรวจอีกที
-        paymentConfirmedAt: null,   // ยังไม่คอนเฟิร์ม
+        paymentVerified: false,
+        paymentConfirmedAt: null,
       },
       select: { id: true, paymentSlipAmount: true, paymentVerified: true, paymentConfirmedAt: true },
     });
