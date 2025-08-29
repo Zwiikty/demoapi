@@ -4,24 +4,39 @@ const path = require('path');
 const sharp = require('sharp');
 const Tesseract = require('tesseract.js');
 const prisma = require('../../prisma/client');
-const FIXED_UPLOADS_DIR = '/app/src/uploads/slips';
+const FIXED_UPLOADS_DIR = process.env.SLIPS_DIR || path.resolve(__dirname, '../uploads/slips');
 
-async function preprocessBottom(bufOrPath, {
-  cropBottomRatio = 0.35, 
-  upscale = 2.0 
-} = {}) {
-  const img = sharp(bufOrPath);
-  const meta = await img.metadata();
-  const h = meta.height, w = meta.width;
-  const cropH = Math.max(10, Math.floor(h * cropBottomRatio));
-  return await img
-    .extract({ left: 0, top: h - cropH, width: w, height: cropH })
-    .greyscale()
-    .normalize()
-    .threshold(0)
-    .resize(Math.round(w * upscale), Math.round(cropH * upscale), { kernel: 'lanczos3' })
-    .png()
-    .toBuffer();
+/* ===================== OCR WORKER (singleton, Thai only) ===================== */
+let worker = null;
+async function getWorkerTH() {
+  if (!worker) {
+    worker = await Tesseract.createWorker({
+    });
+    await worker.loadLanguage('tha');
+    await worker.initialize('tha');
+  }
+  return worker;
+}
+
+const MAX_CONCURRENT_OCR = Number(process.env.OCR_CONCURRENCY || 1); // 1-2
+let running = 0;
+const queue = [];
+async function withOcrSlot(fn) {
+  if (running >= MAX_CONCURRENT_OCR) {
+    await new Promise(resolve => queue.push(resolve));
+  }
+  running++;
+  try { return await fn(); }
+  finally {
+    running--;
+    const next = queue.shift();
+    if (next) next();
+  }
+}
+
+function safeJoinUploadDir(filename) {
+  const base = path.basename(filename);
+  return path.join(FIXED_UPLOADS_DIR, base);
 }
 
 function thaiDigitsToArabic(s) {
@@ -75,78 +90,133 @@ function scoreCandidate(item, lines) {
   return Math.max(score, -10);
 }
 
+async function preprocessBottom(bufOrPath, {
+  cropBottomRatio = 0.28,
+  maxWidth = 900,
+  upscale = 1.35
+} = {}) {
+  const img = sharp(bufOrPath);
+  const meta = await img.metadata();
+  const h = meta.height || 0;
+  const w = meta.width || 0;
+  if (!w || !h) {
+  return res.status(400).json({ message: 'Invalid image (no dimensions)' });
+}
+  const dynamicMaxWidth = w > 2000 ? 800 : maxWidth;
+
+  const cropH = Math.max(10, Math.floor(h * cropBottomRatio));
+  const targetW = Math.min(w, dynamicMaxWidth);
+  const scale = w ? (targetW / w) : 1;
+  const targetH = Math.max(10, Math.round(cropH * scale * upscale));
+
+  return await img
+    .extract({ left: 0, top: Math.max(0, h - cropH), width: w, height: cropH })
+    .resize(targetW, targetH, { kernel: 'lanczos3', fit: 'cover', withoutEnlargement: true })
+    .grayscale()
+    .normalize()
+    .png()
+    .toBuffer();
+}
+
+async function runOcrOnBufferTH(buf) {
+  const w = await getWorkerTH();
+  const { data } = await w.recognize(buf, {
+    tessedit_pageseg_mode: 6,
+    tessedit_char_whitelist: '0123456789.,: บาท฿THB'
+  });
+  return data?.text || '';
+}
+
+function pickAmountFromText(rawText) {
+  const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(sanitizeLine);
+  const candidates = [];
+  lines.forEach((line, idx) => {
+    const nums = extractDecimals(line);
+    if (!nums.length) return;
+    const lower = line.toLowerCase();
+    nums.forEach(n => {
+      candidates.push({
+        line: idx,
+        context: line,
+        raw: n.raw,
+        val: n.val,
+        flags: {
+          hasPos: POS_KEYS.some(k => lower.includes(k)),
+          hasNeg: NEG_KEYS.some(k => lower.includes(k)),
+          hasUnit: UNIT_KEYS.some(k => lower.includes(k)),
+          timeLike: isTimeLike(lower),
+        },
+      });
+    });
+  });
+
+  let chosen = null;
+  if (candidates.length) {
+    const scored = candidates
+      .filter(x => x.val > 0 && x.val < 200000)
+      .map(x => ({ ...x, score: scoreCandidate(x, lines) }))
+      .sort((a,b) => b.score - a.score);
+
+    if (scored.length) {
+      const top = scored[0].score;
+      const ties = scored.filter(s => s.score === top);
+      const withPosUnit = ties.find(t => t.flags.hasPos && t.flags.hasUnit);
+      chosen = withPosUnit || ties[0];
+    }
+  }
+
+  if (!chosen) {
+    const fallback = extractDecimals(lines.join(' ')).filter(x => x.val > 0);
+    if (fallback.length) chosen = { line: -1, context: '(fallback)', ...fallback[0], score: -1 };
+  }
+
+  if (!chosen) return { amount: null, lines };
+  const amount = Number(chosen.val.toFixed(2));
+  return { amount, lines, chosen };
+}
+
+
 exports.readAmountFromSlip = async (req, res) => {
   try {
-    const { imagePath, bookingId } = req.body;
-    if (!imagePath) return res.status(400).json({ message: 'Missing imagePath' });
+    let { imagePath, bookingId, force } = req.body || {};
+    bookingId = Number(bookingId);
+
     if (!bookingId) return res.status(400).json({ message: 'Missing bookingId' });
-    const full = path.isAbsolute(imagePath)
-      ? imagePath
-      : path.join(FIXED_UPLOADS_DIR, imagePath);
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, slipImage: true, paymentSlipAmount: true, paymentVerified: true, paymentConfirmedAt: true }
+    });
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+
+    if (!imagePath) {
+      if (!booking.slipImage) {
+        return res.status(400).json({ message: 'No slipImage for this booking, please upload slip first.' });
+      }
+      imagePath = booking.slipImage;
+    }
+
+    if (!force && booking.paymentSlipAmount != null) {
+      return res.status(200).json({
+        amount: booking.paymentSlipAmount,
+        booking,
+        message: 'Amount already exists (cached).'
+      });
+    }
+
+    const full = path.isAbsolute(imagePath) ? imagePath : safeJoinUploadDir(imagePath);
     if (!fs.existsSync(full)) {
       return res.status(404).json({ message: 'Image not found', path: full });
     }
-    const preprocessed = await preprocessBottom(full);
-    const result = await Tesseract.recognize(preprocessed, 'eng+tha', {
-      tessedit_pageseg_mode: 6,
-      tessedit_char_whitelist: '0123456789.,:/-()abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ฿บาทTHBน.',
-      logger: m => console.log('[tesseract]', m?.status || m),
-    });
-    const rawText = result?.data?.text || '';
-    const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(sanitizeLine);
-    const candidates = [];
-    lines.forEach((line, idx) => {
-      const nums = extractDecimals(line);
-      if (!nums.length) return;
-      const lower = line.toLowerCase();
-      nums.forEach(n => {
-        candidates.push({
-          line: idx,
-          context: line,
-          raw: n.raw,
-          val: n.val,
-          flags: {
-            hasPos: POS_KEYS.some(k => lower.includes(k)),
-            hasNeg: NEG_KEYS.some(k => lower.includes(k)),
-            hasUnit: UNIT_KEYS.some(k => lower.includes(k)),
-            timeLike: isTimeLike(lower),
-          },
-        });
-      });
+
+    const preprocessedBuf = await preprocessBottom(full);
+
+    const { amount, lines, chosen } = await withOcrSlot(async () => {
+      const text = await runOcrOnBufferTH(preprocessedBuf);
+      return pickAmountFromText(text);
     });
 
-    let chosen = null;
-    if (candidates.length) {
-      const scored = candidates
-        .filter(x => x.val > 0 && x.val < 200000)
-        .map(x => ({ ...x, score: scoreCandidate(x, lines) }))
-        .sort((a,b) => b.score - a.score);
-
-      if (scored.length) {
-        const top = scored[0].score;
-        const ties = scored.filter(s => s.score === top);
-        const withPosUnit = ties.find(t => t.flags.hasPos && t.flags.hasUnit);
-        chosen = withPosUnit || ties[0];
-      }
-    }
-
-    if (!chosen) {
-      const fallback = extractDecimals(lines.join(' ')).filter(x => x.val > 0);
-      if (fallback.length) chosen = { line: -1, context: '(fallback)', ...fallback[0], score: -1 };
-    }
-
-    if (!chosen) {
-      return res.status(400).json({ message: 'Amount not found', ocrText: rawText, lines });
-    }
-
-    const amount = Number(chosen.val.toFixed(2));
-
-    const booking = await prisma.booking.findUnique({
-      where: { id: Number(bookingId) },
-      select: { id: true },
-    });
-    if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
+    if (!amount) {
+      return res.status(400).json({ message: 'Amount not found' });
     }
 
     const updated = await prisma.booking.update({
@@ -156,17 +226,17 @@ exports.readAmountFromSlip = async (req, res) => {
         paymentVerified: false,
         paymentConfirmedAt: null,
       },
-      select: { id: true, paymentSlipAmount: true, paymentVerified: true, paymentConfirmedAt: true },
+      select: { id: true, slipImage: true, paymentSlipAmount: true, paymentVerified: true, paymentConfirmedAt: true },
     });
 
     return res.status(200).json({
       amount,
       booking: updated,
-      debug: { chosen, candidates, lines, mountPath: FIXED_UPLOADS_DIR },
+      debug: { chosen, mountPath: FIXED_UPLOADS_DIR },
       message: 'Amount read from slip and saved to booking. Awaiting admin verification.',
     });
   } catch (err) {
-    console.error(err);
+    console.error('[OCR] error:', err);
     return res.status(500).json({ message: 'OCR failed', error: err.message });
   }
 };

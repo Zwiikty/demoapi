@@ -1,8 +1,7 @@
 const prisma = require('../../prisma/client');
 const generatePayload  = require("promptpay-qr");
 const QRCode = require("qrcode");
-const Tesseract = require('tesseract.js');
-const path = require('path');
+
 
 
 exports.generatePromptPayQR = async (req, res) => {
@@ -27,118 +26,38 @@ exports.generatePromptPayQR = async (req, res) => {
         res.status(500).json({ message: 'QR generation failed', error: error.message });
     }
 };
-/*
-exports.readAmountFromSlip = async (req, res) => {
-  const { imagePath, bookingId } = req.body;
-  const fullPath = path.join(__dirname, "../uploads/slips/", imagePath);
 
+
+exports.getPaymentStatus = async (req, res) => {
   try {
-    const result = await Tesseract.recognize(fullPath, "eng", {
-      logger: (m) => console.log(m),
-    });
-    const text = result.data.text || "";
+    const bookingId = Number(req.query.bookingId || req.params.bookingId);
+    if (!bookingId) return res.status(400).json({ message: 'Missing bookingId' });
 
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    // คีย์เวิร์ดที่มักเจอบนสลิป
-    const keywordLabels = [
-      "ยอดชำระ",
-      "ยอด",
-      "จำนวนเงิน",
-      "จำนวน",
-      "รวม",
-      "รวมทั้งสิ้น",
-      "amount",
-      "total",
-      "paid",
-      "payment",
-      "transfer",
-    ];
-
-    const findDecimals = (s) =>
-      (s.match(/\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2}/g) || [])
-        .map((m) => parseFloat(m.replace(/,/g, "")))
-        .filter((n) => Number.isFinite(n));
-
-    let chosen = null;
-
-    // 1) หาเลขจากบรรทัดที่มีคีย์เวิร์ด
-    const labelled = [];
-    lines.forEach((line, idx) => {
-      const lower = line.toLowerCase();
-      if (keywordLabels.some((k) => lower.includes(k))) {
-        const nums = findDecimals(line);
-        nums.forEach((n) => {
-          if (n > 0 && n < 100000) {
-            labelled.push({ val: n, line: idx, raw: line });
-          }
-        });
+    const b = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        slipImage: true,
+        paymentSlipAmount: true,
+        paymentVerified: true,
+        paymentConfirmedAt: true
       }
     });
+    if (!b) return res.status(404).json({ message: 'Booking not found' });
 
-    if (labelled.length > 0) {
-      labelled.sort((a, b) => a.val - b.val);
-      chosen = labelled[0]; // เลือกค่าที่น้อยที่สุดจากบรรทัดคีย์เวิร์ด
-    } else {
-      // 2) ถ้าไม่มีคีย์เวิร์ด ใช้เลขทศนิยมทั้งหมด
-      const allDecimals = lines.flatMap((line, idx) =>
-        findDecimals(line).map((n) => ({ val: n, line: idx, raw: line }))
-      );
-
-      if (allDecimals.length > 0) {
-        allDecimals.sort((a, b) => a.val - b.val);
-        chosen = allDecimals[0]; // เลือกค่าที่น้อยที่สุด
-      }
-    }
-
-    if (!chosen) {
-      return res
-        .status(400)
-        .json({ message: "Amount not found", ocrText: text });
-    }
-
-    const amount = chosen.val;
-
-    // โหลด booking เพื่อตรวจสอบ
-    const booking = await prisma.booking.findUnique({
-      where: { id: parseInt(bookingId) },
-      include: { court: true },
+    res.json({
+      bookingId: b.id,
+      slipImage: b.slipImage,
+      amount: b.paymentSlipAmount,
+      verified: b.paymentVerified,
+      confirmedAt: b.paymentConfirmedAt
     });
-
-    if (!booking) {
-      return res.status(404).json({ message: "Booking not found" });
-    }
-
-    const durationHours =
-      (new Date(booking.endTime) - new Date(booking.startTime)) /
-      (1000 * 60 * 60);
-    const expectedAmount = booking.court.pricePerHour * durationHours;
-
-    const updateBooking = await prisma.booking.update({
-      where: { id: booking.id },
-      data: {
-        paymentSlipAmount: amount,
-        paymentVerified: false,
-        paymentConfirmedAt: null,
-      },
-    });
-
-    res.status(200).json({
-      amount,
-      expectedAmount,
-      booking,
-      updateBooking,
-      message:
-        "Amount read from slip and saved. Awaiting admin verification.",
-    });
-  } catch (error) {
-    res.status(500).json({ message: "OCR failed", error: error.message });
+  } catch (e) {
+    console.error('[getPaymentStatus] error:', e);
+    res.status(500).json({ message: 'Failed', error: e.message });
   }
 };
-*/
+
 exports.adminVerifyPayment = async (req, res) => {
   const { bookingId } = req.body;
 

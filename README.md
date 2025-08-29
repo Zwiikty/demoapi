@@ -722,37 +722,7 @@ o Error(400)
     "message": "Time slot already booked" (กัน overlap)
 }
 ```
-## 3.6 Get All Bookings (ADMIN)
-**Endpoint**: `/api/bookings`
-**Method**: GET
-**Request Headers**:  
-- `Authorization: Bearer <Admin_token>`
-**Response
-o Success (200): 
-```json
-[
-  {
-    "id": 5,
-    "user": {
-      "id": 1,
-      "name": "John"
-    },
-    "court": {
-      "id": 1,
-      "name": "Court A"
-    },
-    "status": "PENDING",
-    ...
-  }
-]
-```
-o Error(500)
-```json
-{
-    "message": "Fetch failed
-}
-```
-## 3.7 Cancel Booking
+## 3.6 Cancel Booking
 **Endpoint**: `/api/bookings/:bookingId`
 **Method**: DELETE
 **Request Headers**:  
@@ -799,7 +769,7 @@ o Error(500)
     "message": "Qr generation failed
 }
 ```
-## 4.2 Read Amount From Slip (OCR)
+## 4.2 Read Amount From Slip (OCR) 
 **Endpoint**: `/api/payment/ocr-read`
 **Method**: POST
 **Request Headers**:  
@@ -807,8 +777,8 @@ o Error(500)
 **Request Body Example**:
 ```json
 {
-    "imagePath": "1755692240790-674606756.JPG",
     "bookingId": 35
+    //"force": true ใช่ force ocr ใหม่
 }
 ```
 **Response
@@ -829,7 +799,7 @@ o Error(500)
 }
 ```
 ## 4.3 Approve Payment
-**Endpoint**: `/api/payment/admin/verify`
+**Endpoint**: `/api/payment/verify-payment`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <Admin_token>`
@@ -859,7 +829,7 @@ o Error(500)
 }
 ```
 ## 4.4 Reject Payment
-**Endpoint**: `/api/payment/admin/reject`
+**Endpoint**: `/api/payment/reject-payment`
 **Method**: POST
 **Request Headers**:  
 - `Authorization: Bearer <Admin_token>`
@@ -920,6 +890,30 @@ o Success (200):
     },
     ...
 ]
+]
+```
+o Error(500)
+```json
+{
+    "message": "Fetch failed"
+}
+```
+## 4.6 Get Payment status
+**Endpoint**: `/api/payment/payment-status?bookingId`
+**Method**: GET
+**Request Headers**:  
+- `Authorization: Bearer <Admin_token>`
+**Response
+o Success (200): 
+```json
+[
+  {
+    "bookingId": 35,
+    "slipImage": "1755692240790-674606756.JPG",
+    "amount": 70,
+    "verified": false,
+    "confirmedAt": null
+}
 ]
 ```
 o Error(500)

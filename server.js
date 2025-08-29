@@ -5,6 +5,7 @@ const prisma = require('./prisma/client');
 const { Server } = require('socket.io');
 const { disconnect } = require('process');
 const PORT = process.env.PORT || 3000;
+const LOCALHOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 async function startServer() {
   try {
@@ -13,12 +14,16 @@ async function startServer() {
     console.log('Connected to database');
     const server = http.createServer(app);
     const io = new Server(server, {
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-        credentials: true
-      }
-    });
+    cors: {
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true);
+        if (LOCALHOST_RE.test(origin)) return cb(null, true);
+        return cb(new Error('Not allowed by CORS (socket)'));
+      },
+      methods: ['GET','POST','PUT','PATCH','DELETE'],
+      credentials: true
+    }
+  });
 
     const courtRoutes = require('./src/routes/court.routes')(io);
     app.use('/api/courts', courtRoutes);

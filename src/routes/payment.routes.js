@@ -9,4 +9,5 @@ router.post('/generate-qr', authenticate, authorize(['CUSTOMER']), paymentContro
 router.post('/ocr-read', authenticate, authorize(['ADMIN']), readAmountFromSlip);
 router.post('/verify-payment', authenticate, authorize(['ADMIN']), paymentController.adminVerifyPayment);
 router.post('/reject-payment', authenticate, authorize(['ADMIN']), paymentController.adminRejectedPayment);
+router.get('/payment-status', authenticate, authorize(['ADMIN','CUSTOMER']), paymentController.getPaymentStatus);
 module.exports = router;
