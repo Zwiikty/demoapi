@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const Tesseract = require('tesseract.js');
+const { createWorker } = require('tesseract.js');
 const prisma = require('../../prisma/client');
 
 /** ===================== CONFIG ===================== **/
@@ -11,19 +11,13 @@ const FIXED_UPLOADS_DIR =
 
 /** ===================== OCR WORKER (singleton) ===================== **/
 let worker = null;
-async function getWorker() {
-  if (!worker) {
-    worker = await Tesseract.createWorker();
-    // ใช้ทั้งไทย + อังกฤษ เพราะสลิปมีผสม
-    await worker.loadLanguage('eng+tha');
-    await worker.initialize('eng+tha');
-    await worker.setParameters({
-      // โหมดแบ่งบล็อกตัวอักษรเดียว (ค่าประมาณ ได้ผลดีบนสลิป)
-      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-      // จำกัดชุดตัวอักษรเพื่อความสะอาดของตัวเลข
-      tessedit_char_whitelist: '0123456789.,: บาท฿THB',
-    });
-  }
+async function getWorkerTH() {
+  if (worker) return worker;
+  worker = createWorker(['tha','eng'], 1, { 
+    cacheMethod: 'none',
+    langPath: path.resolve(__dirname, '../tessdata'),
+  });
+  await worker.initialize();
   return worker;
 }
 
@@ -74,7 +68,7 @@ function normalizeDelimiters(s) {
 function sanitizeLine(line) {
   let L = thaiDigitsToArabic(line);
   // แทนที่อักษรที่ OCR มักอ่านผิดกับตัวเลข
-  L = L.replace(/O/g, '0').replace(/o/g, '0').replace(/[lI]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+  L = L.replace(/[^\d.,:A-Za-zก-๙\s]/g, '');
   L = normalizeDelimiters(L);
   L = tightenNumberGaps(L);
   return L.trim();
@@ -93,6 +87,17 @@ function extractDecimals(line) {
   let m;
   while ((m = re.exec(line)) !== null) {
     const val = parseFloat(m[0].replace(/ /g, '').replace(/,/g, '').replace(':', '.'));
+    if (Number.isFinite(val)) out.push({ raw: m[0], val });
+  }
+  return out;
+}
+
+function extractIntegers(line) {
+  const out = [];
+  const re = /\b\d{1,3}(?:[ ,]\d{3})*\b/g; // 68, 1,234
+  let m; 
+  while ((m = re.exec(line)) !== null) {
+    const val = parseFloat(m[0].replace(/,/g,''));
     if (Number.isFinite(val)) out.push({ raw: m[0], val });
   }
   return out;
@@ -157,9 +162,12 @@ async function preprocessBottom(
 }
 
 /** ===================== OCR Runner ===================== **/
-async function runOcrOnBuffer(buf) {
-  const w = await getWorker();
-  const { data } = await w.recognize(buf);
+async function runOcrOnBufferTH(buf) {
+  const w = await getWorkerTH();
+  const { data } = await w.recognize(buf, {
+    tessedit_pageseg_mode: 6,
+    tessedit_char_whitelist: '0123456789.,: บาท฿THB',
+  });
   return data?.text || '';
 }
 
@@ -207,6 +215,21 @@ function pickAmountFromText(rawText) {
   }
 
   if (!chosen) {
+  lines.forEach((line, idx) => {
+    const ints = extractIntegers(line);
+    if (!ints.length) return;
+    const lower = line.toLowerCase();
+    const hasPos = POS_KEYS.some(k => lower.includes(k));
+    const hasUnit = UNIT_KEYS.some(k => lower.includes(k));
+    const notTime = !isTimeLike(lower);
+    if (hasPos && notTime) {
+      const best = ints.find(x => x.val > 0 && x.val < 200000);
+      if (best) chosen = { line: idx, context: line, ...best, score: 0 };
+    }
+  });
+  }
+
+  if (!chosen) {
     // fallback: รวมทั้งเอกสารแล้วหาเลขทศนิยมแรกที่สมเหตุสมผล
     const fallback = extractDecimals(lines.join(' ')).filter((x) => x.val > 0);
     if (fallback.length)
@@ -216,14 +239,17 @@ function pickAmountFromText(rawText) {
   if (!chosen) return { amount: null, lines };
   const amount = Number(chosen.val.toFixed(2));
   return { amount, lines, chosen };
+  
 }
+
+
 
 /** ===================== Controller ===================== **/
 exports.readAmountFromSlip = async (req, res) => {
   try {
     let { imagePath, bookingId, force } = req.body || {};
     bookingId = Number(bookingId);
-
+    force = force === true || force === 'true';
     if (!bookingId) {
       return res.status(400).json({ message: 'Missing bookingId' });
     }
@@ -274,7 +300,7 @@ exports.readAmountFromSlip = async (req, res) => {
     const preprocessedBuf = await preprocessBottom(full);
 
     const { amount, lines, chosen } = await withOcrSlot(async () => {
-      const text = await runOcrOnBuffer(preprocessedBuf);
+      const text = await runOcrOnBufferTH(preprocessedBuf);
       return pickAmountFromText(text);
     });
 
