@@ -215,21 +215,26 @@ exports.rescheduleBooking = async (req, res) => {
 }
 
 exports.getAllBookings = async (req, res) => {
-    try {
-        const bookings = await prisma.booking.findMany({
-            include: { user: {
-                select: {
-                    firstName: true,
-                    lastName: true
-                    }
-                } 
-            },
-            orderBy: { date: 'desc' }
-        });
-        res.status(200).json(bookings);
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch all bookings', error: error.message });
-    }
+  try {
+    const bookings = await prisma.booking.findMany({
+      include: {
+        user: {
+          select: { firstName: true, lastName: true }
+        },
+        court: {
+          select: { id: true, name: true, location: true, pricePerHour: true }
+        }
+      },
+      orderBy: [
+        { date: 'desc' },
+        { startTime: 'desc' }
+      ]
+    });
+
+    res.status(200).json(bookings);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch all bookings', error: error.message });
+  }
 };
 
 exports.adminCancelBooking = async (req, res) => {

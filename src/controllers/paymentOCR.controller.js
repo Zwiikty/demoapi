@@ -4,146 +4,187 @@ const path = require('path');
 const sharp = require('sharp');
 const Tesseract = require('tesseract.js');
 const prisma = require('../../prisma/client');
-const FIXED_UPLOADS_DIR = process.env.SLIPS_DIR || path.resolve(__dirname, '../uploads/slips');
 
-/* ===================== OCR WORKER (singleton, Thai only) ===================== */
+/** ===================== CONFIG ===================== **/
+const FIXED_UPLOADS_DIR =
+  process.env.SLIPS_DIR || path.resolve(__dirname, '../uploads/slips');
+
+/** ===================== OCR WORKER (singleton) ===================== **/
 let worker = null;
-async function getWorkerTH() {
+async function getWorker() {
   if (!worker) {
-    worker = await Tesseract.createWorker({
+    worker = await Tesseract.createWorker();
+    // ใช้ทั้งไทย + อังกฤษ เพราะสลิปมีผสม
+    await worker.loadLanguage('eng+tha');
+    await worker.initialize('eng+tha');
+    await worker.setParameters({
+      // โหมดแบ่งบล็อกตัวอักษรเดียว (ค่าประมาณ ได้ผลดีบนสลิป)
+      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+      // จำกัดชุดตัวอักษรเพื่อความสะอาดของตัวเลข
+      tessedit_char_whitelist: '0123456789.,: บาท฿THB',
     });
-    await worker.loadLanguage('tha');
-    await worker.initialize('tha');
   }
   return worker;
 }
 
-const MAX_CONCURRENT_OCR = Number(process.env.OCR_CONCURRENCY || 1); // 1-2
+/** ===================== Concurrency Guard ===================== **/
+const MAX_CONCURRENT_OCR = Number(process.env.OCR_CONCURRENCY || 1); // แนะนำ 1-2
 let running = 0;
 const queue = [];
 async function withOcrSlot(fn) {
   if (running >= MAX_CONCURRENT_OCR) {
-    await new Promise(resolve => queue.push(resolve));
+    await new Promise((resolve) => queue.push(resolve));
   }
   running++;
-  try { return await fn(); }
-  finally {
+  try {
+    return await fn();
+  } finally {
     running--;
     const next = queue.shift();
     if (next) next();
   }
 }
 
+/** ===================== Utils ===================== **/
 function safeJoinUploadDir(filename) {
   const base = path.basename(filename);
   return path.join(FIXED_UPLOADS_DIR, base);
 }
 
 function thaiDigitsToArabic(s) {
-  const map = { '๐':'0','๑':'1','๒':'2','๓':'3','๔':'4','๕':'5','๖':'6','๗':'7','๘':'8','๙':'9' };
-  return s.replace(/[๐-๙]/g, ch => map[ch] ?? ch);
+  const map = {
+    '๐': '0', '๑': '1', '๒': '2', '๓': '3', '๔': '4',
+    '๕': '5', '๖': '6', '๗': '7', '๘': '8', '๙': '9',
+  };
+  return s.replace(/[๐-๙]/g, (ch) => map[ch] ?? ch);
 }
 function tightenNumberGaps(s) {
   return s
-    .replace(/(\d)\s+([.,:])\s*(\d{2})/g, '$1.$3')
+    // 12 : 34 -> 12.34 / 12 . 34 -> 12.34
+    .replace(/(\d)\s*[:.]\s*(\d{2})/g, '$1.$2')
+    // 1 234 -> 1234
     .replace(/(\d)\s+(\d)/g, '$1$2');
 }
 function normalizeDelimiters(s) {
-  return s.replace(/[=•‧∙·˙•·]/g, '.').replace(/，/g, '.').replace(/฿/g, '');
+  return s
+    .replace(/[=•‧∙·˙•·]/g, '.')
+    .replace(/，/g, '.')
+    .replace(/[฿]/g, ''); // เอาเครื่องหมายบาทออก
 }
 function sanitizeLine(line) {
   let L = thaiDigitsToArabic(line);
-  L = L.replace(/O/g,'0').replace(/o/g,'0').replace(/[lI]/g,'1').replace(/S/g,'5').replace(/B/g,'8');
+  // แทนที่อักษรที่ OCR มักอ่านผิดกับตัวเลข
+  L = L.replace(/O/g, '0').replace(/o/g, '0').replace(/[lI]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
   L = normalizeDelimiters(L);
   L = tightenNumberGaps(L);
   return L.trim();
 }
 function isTimeLike(s) {
   const L = s.toLowerCase();
+  // เวลา 12:34 / 12.34 หรือมีวันที่ร่วมด้วย
   if (/\b\d{1,2}\s*[:.]\s*\d{2}\s*(น\.|am|pm)?\b/.test(L)) return true;
   if (/\b\d{1,2}\/\d{1,2}\/\d{2,4}.*\d{1,2}[:.]\d{2}/.test(L)) return true;
   return false;
 }
 function extractDecimals(line) {
+  // รองรับ 1,234.56 / 1234.56 / 12:34 (จะถูกแปลงเป็น . แล้ว)
   const re = /\b\d{1,3}(?:[ ,]\d{3})*[.:]\d{2}\b|\b\d+[.:]\d{2}\b/g;
   const out = [];
   let m;
   while ((m = re.exec(line)) !== null) {
-    const val = parseFloat(m[0].replace(/ /g,'').replace(/,/g,'').replace(':','.'));
+    const val = parseFloat(m[0].replace(/ /g, '').replace(/,/g, '').replace(':', '.'));
     if (Number.isFinite(val)) out.push({ raw: m[0], val });
   }
   return out;
 }
 
-const POS_KEYS = ['จำนวนเงิน','จำนวน','ยอดชำระ','ยอดโอน','ยอดรวม','ยอดสุทธิ','รวมทั้งสิ้น','รวม','payment','paid','amount','total','transfer'].map(x=>x.toLowerCase());
-const UNIT_KEYS = ['บาท','thb'];
-const NEG_KEYS = ['ค่าธรรมเนียม','fee','charge','reference','เลขที่รายการ','ref','รายการอ้างอิง','อ้างอิง','เวลา','time','สแกนตรวจสอบสลิป','scan','qr','เลขที่','transaction id','trx','หมายเลขอ้างอิง'].map(x=>x.toLowerCase());
+// คีย์เวิร์ดที่ชี้ว่าเป็นจำนวนเงิน
+const POS_KEYS = [
+  'จำนวนเงิน', 'จำนวน', 'ยอดชำระ', 'ยอดโอน', 'ยอดรวม', 'ยอดสุทธิ',
+  'รวมทั้งสิ้น', 'รวม', 'payment', 'paid', 'amount', 'total', 'transfer',
+].map((x) => x.toLowerCase());
+const UNIT_KEYS = ['บาท', 'thb'];
+// คีย์เวิร์ดที่ควรหลีกเลี่ยง (ไม่ใช่จำนวนเงินหลัก)
+const NEG_KEYS = [
+  'ค่าธรรมเนียม', 'fee', 'charge', 'reference', 'เลขที่รายการ', 'ref',
+  'รายการอ้างอิง', 'อ้างอิง', 'เวลา', 'time', 'สแกนตรวจสอบสลิป', 'scan',
+  'qr', 'เลขที่', 'transaction id', 'trx', 'หมายเลขอ้างอิง',
+].map((x) => x.toLowerCase());
 
 function scoreCandidate(item, lines) {
   const line = (lines[item.line] || '').toLowerCase();
   let score = 0;
-  if (POS_KEYS.some(k => line.includes(k))) score += 3;
-  if (UNIT_KEYS.some(k => line.includes(k))) score += 2;
-  if (NEG_KEYS.some(k => line.includes(k))) score -= 5;
+  if (POS_KEYS.some((k) => line.includes(k))) score += 3;
+  if (UNIT_KEYS.some((k) => line.includes(k))) score += 2;
+  if (NEG_KEYS.some((k) => line.includes(k))) score -= 5;
   if (isTimeLike(line)) score -= 6;
   if (item.val > 0 && item.val < 200000) score += 1;
   return Math.max(score, -10);
 }
 
-async function preprocessBottom(bufOrPath, {
-  cropBottomRatio = 0.28,
-  maxWidth = 900,
-  upscale = 1.35
-} = {}) {
+/** ===================== Image Preprocess ===================== **/
+async function preprocessBottom(
+  bufOrPath,
+  { cropBottomRatio = 0.28, maxWidth = 900, upscale = 1.35 } = {}
+) {
   const img = sharp(bufOrPath);
   const meta = await img.metadata();
   const h = meta.height || 0;
   const w = meta.width || 0;
-  if (!w || !h) {
-  return res.status(400).json({ message: 'Invalid image (no dimensions)' });
-}
-  const dynamicMaxWidth = w > 2000 ? 800 : maxWidth;
 
+  if (!w || !h) {
+    // ห้ามใช้ res ที่นี่ — โยน Error ให้ catch ภายนอก
+    throw new Error('Invalid image (no dimensions)');
+  }
+
+  const dynamicMaxWidth = w > 2000 ? 800 : maxWidth;
   const cropH = Math.max(10, Math.floor(h * cropBottomRatio));
   const targetW = Math.min(w, dynamicMaxWidth);
-  const scale = w ? (targetW / w) : 1;
+  const scale = w ? targetW / w : 1;
   const targetH = Math.max(10, Math.round(cropH * scale * upscale));
 
   return await img
     .extract({ left: 0, top: Math.max(0, h - cropH), width: w, height: cropH })
-    .resize(targetW, targetH, { kernel: 'lanczos3', fit: 'cover', withoutEnlargement: true })
+    .resize(targetW, targetH, {
+      kernel: 'lanczos3',
+      fit: 'cover',
+      withoutEnlargement: true,
+    })
     .grayscale()
     .normalize()
     .png()
     .toBuffer();
 }
 
-async function runOcrOnBufferTH(buf) {
-  const w = await getWorkerTH();
-  const { data } = await w.recognize(buf, {
-    tessedit_pageseg_mode: 6,
-    tessedit_char_whitelist: '0123456789.,: บาท฿THB'
-  });
+/** ===================== OCR Runner ===================== **/
+async function runOcrOnBuffer(buf) {
+  const w = await getWorker();
+  const { data } = await w.recognize(buf);
   return data?.text || '';
 }
 
 function pickAmountFromText(rawText) {
-  const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(sanitizeLine);
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map(sanitizeLine);
+
   const candidates = [];
   lines.forEach((line, idx) => {
     const nums = extractDecimals(line);
     if (!nums.length) return;
     const lower = line.toLowerCase();
-    nums.forEach(n => {
+    nums.forEach((n) => {
       candidates.push({
         line: idx,
         context: line,
         raw: n.raw,
         val: n.val,
         flags: {
-          hasPos: POS_KEYS.some(k => lower.includes(k)),
-          hasNeg: NEG_KEYS.some(k => lower.includes(k)),
-          hasUnit: UNIT_KEYS.some(k => lower.includes(k)),
+          hasPos: POS_KEYS.some((k) => lower.includes(k)),
+          hasNeg: NEG_KEYS.some((k) => lower.includes(k)),
+          hasUnit: UNIT_KEYS.some((k) => lower.includes(k)),
           timeLike: isTimeLike(lower),
         },
       });
@@ -153,21 +194,23 @@ function pickAmountFromText(rawText) {
   let chosen = null;
   if (candidates.length) {
     const scored = candidates
-      .filter(x => x.val > 0 && x.val < 200000)
-      .map(x => ({ ...x, score: scoreCandidate(x, lines) }))
-      .sort((a,b) => b.score - a.score);
+      .filter((x) => x.val > 0 && x.val < 200000)
+      .map((x) => ({ ...x, score: scoreCandidate(x, lines) }))
+      .sort((a, b) => b.score - a.score);
 
     if (scored.length) {
       const top = scored[0].score;
-      const ties = scored.filter(s => s.score === top);
-      const withPosUnit = ties.find(t => t.flags.hasPos && t.flags.hasUnit);
+      const ties = scored.filter((s) => s.score === top);
+      const withPosUnit = ties.find((t) => t.flags.hasPos && t.flags.hasUnit);
       chosen = withPosUnit || ties[0];
     }
   }
 
   if (!chosen) {
-    const fallback = extractDecimals(lines.join(' ')).filter(x => x.val > 0);
-    if (fallback.length) chosen = { line: -1, context: '(fallback)', ...fallback[0], score: -1 };
+    // fallback: รวมทั้งเอกสารแล้วหาเลขทศนิยมแรกที่สมเหตุสมผล
+    const fallback = extractDecimals(lines.join(' ')).filter((x) => x.val > 0);
+    if (fallback.length)
+      chosen = { line: -1, context: '(fallback)', ...fallback[0], score: -1 };
   }
 
   if (!chosen) return { amount: null, lines };
@@ -175,43 +218,63 @@ function pickAmountFromText(rawText) {
   return { amount, lines, chosen };
 }
 
-
+/** ===================== Controller ===================== **/
 exports.readAmountFromSlip = async (req, res) => {
   try {
     let { imagePath, bookingId, force } = req.body || {};
     bookingId = Number(bookingId);
 
-    if (!bookingId) return res.status(400).json({ message: 'Missing bookingId' });
+    if (!bookingId) {
+      return res.status(400).json({ message: 'Missing bookingId' });
+    }
+
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { id: true, slipImage: true, paymentSlipAmount: true, paymentVerified: true, paymentConfirmedAt: true }
+      select: {
+        id: true,
+        slipImage: true,
+        paymentSlipAmount: true,
+        paymentVerified: true,
+        paymentConfirmedAt: true,
+        courtId: true,
+      },
     });
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
 
+    // default ใช้ไฟล์สลิปจาก booking
     if (!imagePath) {
       if (!booking.slipImage) {
-        return res.status(400).json({ message: 'No slipImage for this booking, please upload slip first.' });
+        return res
+          .status(400)
+          .json({ message: 'No slipImage for this booking, please upload slip first.' });
       }
       imagePath = booking.slipImage;
     }
 
+    // ถ้ามีผลลัพธ์ OCR เก็บไว้แล้ว และไม่ force → ส่ง cache กลับ
     if (!force && booking.paymentSlipAmount != null) {
       return res.status(200).json({
         amount: booking.paymentSlipAmount,
         booking,
-        message: 'Amount already exists (cached).'
+        message: 'Amount already exists (cached).',
       });
     }
 
-    const full = path.isAbsolute(imagePath) ? imagePath : safeJoinUploadDir(imagePath);
+    const full = path.isAbsolute(imagePath)
+      ? imagePath
+      : safeJoinUploadDir(imagePath);
+
     if (!fs.existsSync(full)) {
       return res.status(404).json({ message: 'Image not found', path: full });
     }
 
+    // เตรียมภาพ: ครอปส่วนล่าง + ทำให้ชัดขึ้น
     const preprocessedBuf = await preprocessBottom(full);
 
     const { amount, lines, chosen } = await withOcrSlot(async () => {
-      const text = await runOcrOnBufferTH(preprocessedBuf);
+      const text = await runOcrOnBuffer(preprocessedBuf);
       return pickAmountFromText(text);
     });
 
@@ -223,17 +286,24 @@ exports.readAmountFromSlip = async (req, res) => {
       where: { id: booking.id },
       data: {
         paymentSlipAmount: amount,
-        paymentVerified: false,
+        paymentVerified: false,      // ยังรอ admin verify
         paymentConfirmedAt: null,
       },
-      select: { id: true, slipImage: true, paymentSlipAmount: true, paymentVerified: true, paymentConfirmedAt: true },
+      select: {
+        id: true,
+        slipImage: true,
+        paymentSlipAmount: true,
+        paymentVerified: true,
+        paymentConfirmedAt: true,
+      },
     });
 
     return res.status(200).json({
       amount,
       booking: updated,
       debug: { chosen, mountPath: FIXED_UPLOADS_DIR },
-      message: 'Amount read from slip and saved to booking. Awaiting admin verification.',
+      message:
+        'Amount read from slip and saved to booking. Awaiting admin verification.',
     });
   } catch (err) {
     console.error('[OCR] error:', err);

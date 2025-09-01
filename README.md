@@ -741,6 +741,47 @@ o Error(500)
     "message": "Cancel failed
 }
 ```
+## 3.7 Create Bookings
+**Endpoint**: `/api/bookings`
+**Method**: GET
+**Request Headers**:  
+- `Authorization: Bearer <Admin_token>`
+**Response
+o Success (201): 
+```json
+{
+        "id": 37,
+        "userId": 15,
+        "courtId": 1,
+        "date": "2025-10-01T00:00:00.000Z",
+        "startTime": "2025-10-01T02:00:00.000Z",
+        "endTime": "2025-10-01T03:00:00.000Z",
+        "status": "APPROVE",
+        "slipImage": "17567dasd96-599232857.jpg",
+        "createAt": "2025-09-01T09:41:51.486Z",
+        "updateAt": "2025-09-01T09:50:11.995Z",
+        "rescheduledFromId": null,
+        "paymentSlipAmount": null,
+        "paymentVerified": true,
+        "paymentConfirmedAt": "2025-09-01T09:50:11.994Z",
+        "notiBeforeUse": null,
+        "user": {
+            "firstName": "AA",
+            "lastName": "BB"
+        },
+        "court": {
+            "id": 1,
+            "name": "สนาม 1",
+            "location": "Bangkok",
+            "pricePerHour": 200
+        }
+    },
+    ...
+o Error(500)
+{
+  "message": "404"
+}
+```
 #######################################
 ### 4 Payment 
 ## 4.1 Generate PromptPay QR Code
