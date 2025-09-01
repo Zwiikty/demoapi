@@ -51,6 +51,14 @@ async function startServer() {
         console.log(`User ${id} disconnected`);
       });
     });
+
+    app.use((req, res) => res.status(404).json({ message: 'Not Found' }));
+    app.use((err, req, res, next) => {
+      console.error('[AppError]', err.message);
+      const code = err.message?.includes('CORS') ? 403 : 500;
+      res.status(code).json({ message: err.message || 'Internal Server Error' });
+    });
+    
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on port ${PORT}`);
     });

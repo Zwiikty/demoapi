@@ -7,6 +7,7 @@ const ImagePath = process.env.SLIPS_DIR || path.resolve(__dirname, 'uploads/slip
 const LOCALHOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 app.use(express.json());
+
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -18,6 +19,7 @@ app.use((req, res, next) => {
   }
   next();
 });
+
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);                
@@ -38,12 +40,7 @@ const notiRoutes = require('./routes/noti.routes');
 app.use('/api/notification', notiRoutes);
 
 app.get('/', (_req, res) => res.status(200).send('OK'));
-app.use((req, res) => res.status(404).json({ message: 'Not Found' }));
-app.use((err, req, res, next) => {
-  console.error('[AppError]', err.message);
-  const code = err.message?.includes('CORS') ? 403 : 500;
-  res.status(code).json({ message: err.message || 'Internal Server Error' });
-});
+
 
 module.exports = app;
 
