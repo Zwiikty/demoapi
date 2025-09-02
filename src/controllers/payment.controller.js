@@ -154,6 +154,9 @@ exports.adminRejectedPayment = async (req, res) => {
           data: { status: 'AVAILABLE' },
         });
       }
+      await tx.bookingTimeSlot.deleteMany({
+        where: { bookingId: booking.id }
+      });
 
       const ledger = await tx.pointLedger.findUnique({
         where: { bookingId: booking.id },
