@@ -9,20 +9,33 @@ const prisma = require('../../prisma/client');
 const FIXED_UPLOADS_DIR =
   process.env.SLIPS_DIR || path.resolve(__dirname, '../uploads/slips');
 
-/** ===================== OCR WORKER (singleton) ===================== **/
+/** ===================== OCR WORKER (singleton, load langs online) ===================== **/
 let worker = null;
+
 async function getWorkerTH() {
   if (worker) return worker;
-  worker = createWorker(['tha','eng'], 1, { 
+
+  // v6 API: createWorker(options) -> loadLanguage(langs) -> initialize(langs)
+  worker = await createWorker({
     cacheMethod: 'none',
-    langPath: path.resolve(__dirname, '../tessdata'),
+    logger: (m) => console.log('[OCR]', m.status, m.progress ?? ''),
   });
-  await worker.initialize();
+
+  const langs = 'tha+eng';
+  try {
+    await worker.loadLanguage(langs);
+    await worker.initialize(langs);
+  } catch (e) {
+    console.warn('[OCR] load tha+eng failed, fallback to eng only:', e?.message);
+    await worker.loadLanguage('eng');
+    await worker.initialize('eng');
+  }
+
   return worker;
 }
 
 /** ===================== Concurrency Guard ===================== **/
-const MAX_CONCURRENT_OCR = Number(process.env.OCR_CONCURRENCY || 1); // แนะนำ 1-2
+const MAX_CONCURRENT_OCR = Number(process.env.OCR_CONCURRENCY || 1); // 1-2 แนะนำ
 let running = 0;
 const queue = [];
 async function withOcrSlot(fn) {
@@ -52,36 +65,40 @@ function thaiDigitsToArabic(s) {
   };
   return s.replace(/[๐-๙]/g, (ch) => map[ch] ?? ch);
 }
+
 function tightenNumberGaps(s) {
   return s
-    // 12 : 34 -> 12.34 / 12 . 34 -> 12.34
+    // 12 : 34 / 12 . 34 -> 12.34
     .replace(/(\d)\s*[:.]\s*(\d{2})/g, '$1.$2')
     // 1 234 -> 1234
     .replace(/(\d)\s+(\d)/g, '$1$2');
 }
+
 function normalizeDelimiters(s) {
   return s
     .replace(/[=•‧∙·˙•·]/g, '.')
     .replace(/，/g, '.')
-    .replace(/[฿]/g, ''); // เอาเครื่องหมายบาทออก
+    .replace(/[฿]/g, ''); // ตัดสัญลักษณ์บาทออก
 }
+
 function sanitizeLine(line) {
   let L = thaiDigitsToArabic(line);
-  // แทนที่อักษรที่ OCR มักอ่านผิดกับตัวเลข
+  // เก็บเฉพาะตัวที่จำเป็นเพื่อลดสัญลักษณ์รบกวน
   L = L.replace(/[^\d.,:A-Za-zก-๙\s]/g, '');
   L = normalizeDelimiters(L);
   L = tightenNumberGaps(L);
   return L.trim();
 }
+
 function isTimeLike(s) {
   const L = s.toLowerCase();
-  // เวลา 12:34 / 12.34 หรือมีวันที่ร่วมด้วย
   if (/\b\d{1,2}\s*[:.]\s*\d{2}\s*(น\.|am|pm)?\b/.test(L)) return true;
   if (/\b\d{1,2}\/\d{1,2}\/\d{2,4}.*\d{1,2}[:.]\d{2}/.test(L)) return true;
   return false;
 }
+
 function extractDecimals(line) {
-  // รองรับ 1,234.56 / 1234.56 / 12:34 (จะถูกแปลงเป็น . แล้ว)
+  // รองรับ 1,234.56 / 1234.56 / 12:34 (ถูกแปลงเป็น . แล้ว)
   const re = /\b\d{1,3}(?:[ ,]\d{3})*[.:]\d{2}\b|\b\d+[.:]\d{2}\b/g;
   const out = [];
   let m;
@@ -94,22 +111,21 @@ function extractDecimals(line) {
 
 function extractIntegers(line) {
   const out = [];
-  const re = /\b\d{1,3}(?:[ ,]\d{3})*\b/g; // 68, 1,234
-  let m; 
+  const re = /\b\d{1,3}(?:[ ,]\d{3})*\b/g; // 68, 1,234, 900
+  let m;
   while ((m = re.exec(line)) !== null) {
-    const val = parseFloat(m[0].replace(/,/g,''));
+    const val = parseFloat(m[0].replace(/,/g, ''));
     if (Number.isFinite(val)) out.push({ raw: m[0], val });
   }
   return out;
 }
 
-// คีย์เวิร์ดที่ชี้ว่าเป็นจำนวนเงิน
+// คีย์เวิร์ดบวก/หน่วย/ลบ สำหรับจัดอันดับ
 const POS_KEYS = [
   'จำนวนเงิน', 'จำนวน', 'ยอดชำระ', 'ยอดโอน', 'ยอดรวม', 'ยอดสุทธิ',
   'รวมทั้งสิ้น', 'รวม', 'payment', 'paid', 'amount', 'total', 'transfer',
 ].map((x) => x.toLowerCase());
 const UNIT_KEYS = ['บาท', 'thb'];
-// คีย์เวิร์ดที่ควรหลีกเลี่ยง (ไม่ใช่จำนวนเงินหลัก)
 const NEG_KEYS = [
   'ค่าธรรมเนียม', 'fee', 'charge', 'reference', 'เลขที่รายการ', 'ref',
   'รายการอ้างอิง', 'อ้างอิง', 'เวลา', 'time', 'สแกนตรวจสอบสลิป', 'scan',
@@ -138,7 +154,6 @@ async function preprocessBottom(
   const w = meta.width || 0;
 
   if (!w || !h) {
-    // ห้ามใช้ res ที่นี่ — โยน Error ให้ catch ภายนอก
     throw new Error('Invalid image (no dimensions)');
   }
 
@@ -171,6 +186,7 @@ async function runOcrOnBufferTH(buf) {
   return data?.text || '';
 }
 
+/** ===================== Amount Picker ===================== **/
 function pickAmountFromText(rawText) {
   const lines = rawText
     .split(/\r?\n/)
@@ -214,35 +230,32 @@ function pickAmountFromText(rawText) {
     }
   }
 
+  // Fallback: เมื่อไม่เจอทศนิยม ให้ลอง “จำนวนเต็ม” บรรทัดที่มี keyword บวก/หน่วย และไม่เหมือนเวลา
   if (!chosen) {
-  lines.forEach((line, idx) => {
-    const ints = extractIntegers(line);
-    if (!ints.length) return;
-    const lower = line.toLowerCase();
-    const hasPos = POS_KEYS.some(k => lower.includes(k));
-    const hasUnit = UNIT_KEYS.some(k => lower.includes(k));
-    const notTime = !isTimeLike(lower);
-    if (hasPos && notTime) {
-      const best = ints.find(x => x.val > 0 && x.val < 200000);
-      if (best) chosen = { line: idx, context: line, ...best, score: 0 };
-    }
-  });
+    lines.forEach((line, idx) => {
+      const ints = extractIntegers(line);
+      if (!ints.length) return;
+      const lower = line.toLowerCase();
+      const hasPos = POS_KEYS.some((k) => lower.includes(k));
+      const notTime = !isTimeLike(lower);
+      if (hasPos && notTime) {
+        const best = ints.find((x) => x.val > 0 && x.val < 200000);
+        if (best) chosen = { line: idx, context: line, ...best, score: 0 };
+      }
+    });
   }
 
+  // Fallback สุดท้าย: รวมทั้งเอกสารแล้วหาเลขทศนิยมแรก
   if (!chosen) {
-    // fallback: รวมทั้งเอกสารแล้วหาเลขทศนิยมแรกที่สมเหตุสมผล
     const fallback = extractDecimals(lines.join(' ')).filter((x) => x.val > 0);
     if (fallback.length)
       chosen = { line: -1, context: '(fallback)', ...fallback[0], score: -1 };
   }
 
   if (!chosen) return { amount: null, lines };
-  const amount = Number(chosen.val.toFixed(2));
+  const amount = Number((chosen.val ?? 0).toFixed(2));
   return { amount, lines, chosen };
-  
 }
-
-
 
 /** ===================== Controller ===================== **/
 exports.readAmountFromSlip = async (req, res) => {
@@ -250,6 +263,7 @@ exports.readAmountFromSlip = async (req, res) => {
     let { imagePath, bookingId, force } = req.body || {};
     bookingId = Number(bookingId);
     force = force === true || force === 'true';
+
     if (!bookingId) {
       return res.status(400).json({ message: 'Missing bookingId' });
     }
@@ -299,7 +313,7 @@ exports.readAmountFromSlip = async (req, res) => {
     // เตรียมภาพ: ครอปส่วนล่าง + ทำให้ชัดขึ้น
     const preprocessedBuf = await preprocessBottom(full);
 
-    const { amount, lines, chosen } = await withOcrSlot(async () => {
+    const { amount, chosen } = await withOcrSlot(async () => {
       const text = await runOcrOnBufferTH(preprocessedBuf);
       return pickAmountFromText(text);
     });
@@ -312,7 +326,7 @@ exports.readAmountFromSlip = async (req, res) => {
       where: { id: booking.id },
       data: {
         paymentSlipAmount: amount,
-        paymentVerified: false,      // ยังรอ admin verify
+        paymentVerified: false, // ยังรอ admin verify
         paymentConfirmedAt: null,
       },
       select: {
