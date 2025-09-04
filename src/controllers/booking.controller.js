@@ -41,6 +41,9 @@ exports.createBooking = async (req, res) => {
                 date: new Date(date),
                 startTime: startDateTime,
                 endTime: endDateTime,
+            },
+            include: {
+              court: true
             }
         });
         await prisma.bookingTimeSlot.createMany({
@@ -63,6 +66,7 @@ exports.createBooking = async (req, res) => {
             bookingId: booking.id,
             userId: booking.userId,
             courtId: booking.courtId,
+            courtName: booking.court.name,
             date: booking.date,
             startTime: booking.startTime,
             endTime: booking.endTime
