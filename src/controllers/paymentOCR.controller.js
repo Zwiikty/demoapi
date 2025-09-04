@@ -328,7 +328,6 @@ exports.readAmountFromSlip = async (req, res) => {
     return res.status(200).json({
       amount,
       booking: updated,
-      debug: { chosen, mountPath: FIXED_UPLOADS_DIR },
       message:
         'Amount read from slip and saved to booking. Awaiting admin verification.',
     });
