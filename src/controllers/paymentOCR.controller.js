@@ -14,23 +14,10 @@ let worker = null;
 
 async function getWorkerTH() {
   if (worker) return worker;
-
-  // v6 API: createWorker(options) -> loadLanguage(langs) -> initialize(langs)
-  worker = await createWorker({
+  worker = createWorker(['tha','eng'], 1, {
     cacheMethod: 'none',
-    logger: (m) => console.log('[OCR]', m.status, m.progress ?? ''),
   });
-
-  const langs = 'tha+eng';
-  try {
-    await worker.loadLanguage(langs);
-    await worker.initialize(langs);
-  } catch (e) {
-    console.warn('[OCR] load tha+eng failed, fallback to eng only:', e?.message);
-    await worker.loadLanguage('eng');
-    await worker.initialize('eng');
-  }
-
+  await worker.initialize();
   return worker;
 }
 
