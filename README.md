@@ -965,8 +965,57 @@ o Error(500)
 ```
 #######################################
 ### 5 Notification
+##FCM register
+**Endpoint**: `/api/device-token/register`
+**Method**: POST
+**Request Headers**:  
+- `Authorization: Bearer <Customer_token>`
+```json
+  {
+  "token": "<FCM_DEVICE_TOKEN>",
+  "platform": "android"
+}
+```
+**Response
+o Success (200): 
+```json
+{
+  "ok": true,
+  "deviceTokenId": 5
+}
+```
+o Error(400)
+```json
+{
+  "message": "token is required"
+}
+```
+##FCM unregister
+**Endpoint**: `/api/device-token/unregister`
+**Method**: POST
+**Request Headers**:  
+- `Authorization: Bearer <Customer_token>`
+```json
+  {
+  "token": "<FCM_DEVICE_TOKEN>",
+  "platform": "android"
+}
+```
+**Response
+o Success (200): 
+```json
+{
+  "ok": true
+}
+```
+o Error(400)
+```json
+{
+  "message": "token is required"
+}
 ```
 **request jwt**
+```
 ```
 ## 5.1 create booking noti (admin)
 **Socket name**: `new-booking`
