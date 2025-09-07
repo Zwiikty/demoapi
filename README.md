@@ -968,14 +968,14 @@ o Error(500)
 ```
 **request jwt**
 ```
-## 5.1 create booking noti
-**Socket name**: `new-booking (admins)`
-## 5.2 slip uploaded noti
-**Socket name**: `slip-uploaded (admins)`
-## 5.3 payment approve noti
-**Socket name**: `payment-approved (user)`
-## 5.4 payment reject noti
-**Socket name**: `payment-reject (user)`
+## 5.1 create booking noti (admin)
+**Socket name**: `new-booking`
+## 5.2 slip uploaded noti (admin)
+**Socket name**: `slip-uploaded`
+## 5.3 payment approve noti (customer)
+**Socket name**: `payment-approved`
+## 5.4 payment reject noti (customer)
+**Socket name**: `payment-reject`
 ## 5.5 notification alert
 **Endpoint**: `/api/notification/noti-setting/:bookingId`
 **Method**: PUT
