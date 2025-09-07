@@ -22,6 +22,7 @@ model User {
   bookings      Booking[]
   points        Int       @default(0)
   pointLedger   PointLedger[]
+  deviceTokens DeviceToken[]
 }
 
 enum Role {
@@ -61,7 +62,12 @@ model Booking {
   paymentConfirmedAt  DateTime?
   bookingTimeSlots BookingTimeSlot[]
   notiBeforeUse Int?
+  remindedAt    DateTime?
   pointLedger PointLedger?
+
+  @@index([startTime])
+  @@index([userId])
+  @@index([remindedAt])
 }
 
 enum BookingStatus {
@@ -134,4 +140,16 @@ model PointLedger {
   points           Int
   reason           String?
   createdAt        DateTime  @default(now())
+}
+
+model DeviceToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  platform  String   // 'android' | 'ios' | 'web'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([userId])
 }
