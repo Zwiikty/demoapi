@@ -15,6 +15,7 @@ exports.registerToken = async (req, res) => {
     });
 
     res.json({ ok: true, deviceTokenId: saved.id });
+    console.log('Received token:', token, 'for userId:', userId);
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok: false, error: e.message });
