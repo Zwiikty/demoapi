@@ -43,7 +43,7 @@ exports.checkAndSendNotifications = async (io) => {
       },
       data: {
         bookingId: String(booking.id),
-        startTime: dayjs(booking.startTime).toISOString(),
+        startTime: dayjs(booking.startTime).tz('Asia/Bangkok').format(),
         notiBeforeUse: String(booking.notiBeforeUse ?? 0),
       },
     };

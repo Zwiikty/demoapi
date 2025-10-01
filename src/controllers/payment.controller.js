@@ -188,6 +188,7 @@ exports.adminRejectedPayment = async (req, res) => {
     }
 
     const { booking, pointsReverted } = await prisma.$transaction(async (tx) => {
+      // อัปเดต Booking → REJECTED
       const updated = await tx.booking.update({
         where: { id },
         data: {
@@ -198,25 +199,27 @@ exports.adminRejectedPayment = async (req, res) => {
         include: { court: true },
       });
 
+      // ดึง courtTimeSlot ที่เกี่ยวข้อง
       const bookingTimeSlots = await tx.bookingTimeSlot.findMany({
         where: { bookingId: updated.id },
         select: { courtTimeSlotId: true },
       });
       const slotIds = bookingTimeSlots.map(s => s.courtTimeSlotId);
 
-      // ปล่อย slot -> AVAILABLE
       if (slotIds.length > 0) {
+        // ✅ ปล่อย slot ให้ AVAILABLE
         await tx.courtTimeSlot.updateMany({
           where: { id: { in: slotIds } },
           data: { status: 'AVAILABLE' },
         });
-      }
-      // ลบ mapping ออกจาก booking
-      await tx.bookingTimeSlot.deleteMany({
-        where: { bookingId: updated.id }
-      });
 
-      // คืนแต้มถ้ามี
+        // ✅ ลบ mapping ออกจาก BookingTimeSlot
+        await tx.bookingTimeSlot.deleteMany({
+          where: { bookingId: updated.id }
+        });
+      }
+
+      // ✅ คืนแต้ม (ถ้ามี)
       const ledger = await tx.pointLedger.findUnique({
         where: { bookingId: updated.id },
       });
@@ -240,7 +243,7 @@ exports.adminRejectedPayment = async (req, res) => {
       return { booking: updated, pointsReverted: reverted };
     });
 
-    // 🔔 แจ้งลูกค้า: Socket + FCM
+    // 🔔 แจ้งลูกค้า
     const io = req.app.get('io');
     await notifyUser(
       io,
@@ -274,7 +277,7 @@ exports.adminRejectedPayment = async (req, res) => {
     );
 
     res.status(200).json({
-      message: 'Payment rejected, time slots released, points reverted if existed.',
+      message: 'Payment rejected, time slots released, bookingTimeSlot cleared, points reverted if existed.',
       booking,
       pointsReverted,
     });
